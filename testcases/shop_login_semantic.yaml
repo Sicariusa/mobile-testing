@@ -1,0 +1,30 @@
+# Fully semantic login — NO resource-ids anywhere. Targets are the visible
+# labels; the engine ranks the live screen, binds the real element, and caches
+# it. Demonstrates enter_text + submit + label targets.
+name: "Shop login (semantic, no ids)"
+package: com.example.shop
+launch_activity: null
+
+data:
+  email: test@example.com
+  password: Password123
+
+steps:
+  - action: launch
+
+  - action: enter_text
+    target: "Email"
+    value: "{{email}}"
+
+  - action: enter_text
+    target: "Password"
+    value: "{{password}}"
+
+  - action: submit
+
+  - assert:
+      type: text_exists
+      value: "Welcome"
+
+  - assert:
+      type: screen_changed

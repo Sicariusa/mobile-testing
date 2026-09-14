@@ -1,0 +1,27 @@
+name: "Login Test"
+package: "com.swaglabsmobileapp"
+
+data:
+  username: "standard_user"
+  password: "secret_sauce"
+
+steps:
+  - action: launch
+
+  - action: enter_text
+    target: "Username"
+    value: "{{username}}"
+
+  - action: enter_text
+    target: "Password"
+    value: "{{password}}"
+
+  - action: tap
+    target: "Login"
+
+  - assert:
+      type: text_exists
+      value: "Products"
+
+  - assert:
+      type: screen_changed

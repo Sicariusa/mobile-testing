@@ -1,0 +1,17 @@
+name: "Nextcloud Signup"
+package: com.nextcloud.client
+data: { email: test@example.com, password: Password123 }
+steps:
+  - action: launch
+  - action: tap
+    target: "Sign up"
+  - assert: { type: activity_changed }
+  - action: enter_text
+    target: "Email"
+    value: "{{email}}"
+  - action: enter_text
+    target: "Password"
+    value: "{{password}}"
+  - action: submit
+  - assert: { type: activity_changed }
+  - assert: { type: text_exists, value: "Welcome" }

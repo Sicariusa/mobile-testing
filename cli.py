@@ -16,6 +16,14 @@ import os
 import sys
 import time
 
+# Live screens carry glyphs (e.g. U+202F) the Windows cp1252 console can't
+# encode; print UTF-8 and never let a stray character crash a report.
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(encoding="utf-8", errors="replace")
+    except (AttributeError, ValueError):
+        pass
+
 from engine import device as device_mod
 from engine import inspect as inspect_mod
 from engine.observation import observe
@@ -134,6 +142,30 @@ def cmd_inspect(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_replay(args: argparse.Namespace) -> int:
+    """Re-print a finished run's per-step verdicts from its timeline.json —
+    no device, no re-execution."""
+    path = args.from_report
+    if not path:
+        runs = sorted((os.path.join("reports", d) for d in os.listdir("reports")),
+                      reverse=True) if os.path.isdir("reports") else []
+        path = next((os.path.join(r, "timeline.json") for r in runs
+                     if os.path.exists(os.path.join(r, "timeline.json"))), None)
+    if not path or not os.path.exists(path):
+        print("No timeline.json found — pass --from-report <path>.", file=sys.stderr)
+        return 2
+    with open(path, "r", encoding="utf-8") as fh:
+        tl = json.load(fh)
+    meta, steps = tl.get("meta", {}), tl.get("steps", [])
+    print(f"Replay: {meta.get('name','?')}  overall={meta.get('overall','?')}")
+    print(f"{'#':>2}  {'status':<8} {'action':<22} {'resolved':<12} {'validated':<10} reason")
+    for s in steps:
+        print(f"{s.get('index','?'):>2}  {str(s.get('status','')):<8} "
+              f"{str(s.get('action','')):<22} {str(s.get('resolved_by') or ''):<12} "
+              f"{str(s.get('validated_by') or ''):<10} {s.get('failure_reason') or ''}")
+    return 0
+
+
 def cmd_run(args: argparse.Namespace) -> int:
     # fail early with precise guidance rather than a stack trace
     report = device_mod.probe_environment()
@@ -178,17 +210,21 @@ def build_parser() -> argparse.ArgumentParser:
                    help="With --inspect + --apk: install and launch before scanning.")
     p.add_argument("--screens-dir", default="screens",
                    help="Where --inspect writes screen bundles (default: screens).")
+    p.add_argument("--from-report",
+                   help="For replay: path to a run's timeline.json (default: latest).")
     return p
 
 
 def main(argv: list[str] | None = None) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
     command = None
-    if argv and argv[0] in ("inspect", "run", "doctor"):
+    if argv and argv[0] in ("inspect", "run", "doctor", "replay"):
         command = argv.pop(0)
     args = build_parser().parse_args(argv)
     if command == "doctor" or args.check_env:
         return cmd_check_env()
+    if command == "replay":
+        return cmd_replay(args)
     if command == "inspect" or args.inspect:
         return cmd_inspect(args)
     if not args.test:
