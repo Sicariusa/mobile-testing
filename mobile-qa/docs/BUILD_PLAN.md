@@ -200,44 +200,31 @@ A `docs/` directory plus README, so the project can be picked up later:
 
 ---
 
-## As-built status (built + pushed in the cloud session)
+## Follow-up: live-device hardening + dry-run (in progress)
 
-Everything in this plan was implemented, committed, and pushed to
-`claude/mobile-qa-test-runner-qfa1el`. Honest split of what is proven vs. what a
-local session still needs to validate:
+Goal: since the real APK+device flow can't run in this container (no KVM, no
+binder, egress limited to 80/443 — all three workarounds verified dead), make
+the FIRST local live run succeed by removing the device adapter's known
+first-contact failure modes, and add a device-free way to author/check a test
+case. Already validated this session: `read_apk_metadata` against a real APK via
+real aapt, and every uiautomator2 method/attr the adapter calls (both now
+locked in as tests; suite at 48 passing).
 
-### Verified here (executed)
-- `pytest -q` → **30 passed**. Real Tesseract runs against rendered screenshots.
-- Coverage: OCR find/exists; validator (crash gate first, hierarchy→OCR,
-  OCR-only pass, the error-screen false-positive guard, `screen_changed`
-  thresholds, `element_exists`, `activity_is`); resolver (selector priority +
-  OCR fallback + scroll); recovery (keyboard/scroll/BLOCKED escalation); loader
-  (schema + `{{data}}` + parses `testcases/login.yaml`); report HTML markers;
-  runner end-to-end across normal / OCR-only / blocked / crash asserting exact
-  `(status, resolved_by, validated_by)` tuples.
-- `python cli.py --check-env` and `--help`; a real `report.html` was generated.
-- Installed and importable: `adb`, `aapt`, `tesseract`, `uiautomator2`,
-  `pytesseract`, `Pillow`, `pyyaml`.
+Changes:
+1. **`engine/device.py` — `_U2Element.center()`**: prefer u2's own `.center()`
+   (confirmed present in u2 3.7.0), fall back to computing from `info["bounds"]`.
+   Removes the risk of an unexpected bounds-dict shape on a real device.
+2. **`engine/device.py` — `AndroidDevice.screenshot()`**: `os.makedirs` the
+   parent dir before saving, so a real-device capture never fails on a missing
+   path.
+3. **`cli.py` — `--dry-run`**: with `--test`, load+validate the YAML, print the
+   resolved step plan (action/target/value, assert type/value) and the
+   `--check-env` readiness, then exit 0 WITHOUT connecting a device. Lets the
+   APK flow be authored and checked before any device is attached.
 
-### NOT verified here — validate on your LOCAL run (no device/APK in the cloud box)
-The device-independent core is tested; the **live-device adapter is written to
-the uiautomator2 v3 / adb API but never ran against real hardware**. First live
-run is where any API mismatch would surface. Check specifically:
-- `engine/device.py::AndroidDevice` — `connect`, `install`, `launch`
-  (`app_start`), `screenshot`, `dump_hierarchy`, `app_current`,
-  `keyboard_visible` (dumpsys `mInputShown`), `find` (u2 selectors),
-  `set_text`/`send_keys`, `scroll_forward`, `press_back`, `swipe`.
-- `engine/device.py::read_apk_metadata` — `aapt dump badging` regex against a
-  real APK's output.
-- The full path: `python cli.py --apk app.apk --test testcases/login.yaml`.
+Not doing: the adb-over-443 transport. Rejected as low value — anyone who can
+expose a device over a tunnel can just run the runner on that machine, so it
+would be unvalidated infra with no real payoff.
 
-### Local bring-up checklist
-1. `pip install -r requirements.txt`
-2. Follow `docs/SETUP_ANDROID.md` (SDK + device/AVD + `python -m uiautomator2 init`).
-3. `python cli.py --check-env` → expect **Live runner: READY**.
-4. Point `testcases/login.yaml` at a real app: set `package`, the resource-ids,
-   and expected text/values to your app's actual values.
-5. `python cli.py --apk <your.apk> --test testcases/login.yaml`, then open
-   `reports/<run_id>/report.html`.
-6. If a u2/adb call errors, fix it in `engine/device.py` only — the layers above
-   it are covered by tests and should not need changes.
+Verify: `pytest -q` stays green (48+); `python cli.py --dry-run --test
+testcases/login.yaml` prints the plan; commit + push to the branch.

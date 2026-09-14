@@ -17,6 +17,7 @@ Design rule: nothing above this file imports ``uiautomator2`` or shells out to
 """
 from __future__ import annotations
 
+import os
 import re
 import shutil
 import subprocess
@@ -131,9 +132,14 @@ class _U2Element(Element):
         self._sel.set_text(value)
 
     def center(self) -> tuple[int, int]:
-        info = self._sel.info
-        b = info["bounds"]
-        return ((b["left"] + b["right"]) // 2, (b["top"] + b["bottom"]) // 2)
+        # Prefer u2's own center(); fall back to computing from bounds if the
+        # installed version or a given element doesn't provide it.
+        try:
+            x, y = self._sel.center()
+            return (int(x), int(y))
+        except Exception:
+            b = self._sel.info["bounds"]
+            return ((b["left"] + b["right"]) // 2, (b["top"] + b["bottom"]) // 2)
 
     def exists(self) -> bool:
         return bool(self._sel.exists)
@@ -181,6 +187,8 @@ class AndroidDevice(Device):
 
     # -- perception -----------------------------------------------------------
     def screenshot(self, path: str) -> str:
+        parent = os.path.dirname(os.path.abspath(path))
+        os.makedirs(parent, exist_ok=True)
         self._d.screenshot(path)
         return path
 
