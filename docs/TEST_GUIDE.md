@@ -10,24 +10,92 @@ Commands are Windows PowerShell. Every run writes its own timestamped report to
 
 ## The 30-second mental model
 
+You write **intent** (visible labels). The engine perceives the live screen,
+finds the real element, binds it, and remembers it.
+
 ```
-APK + login.yaml
+APK + testcase.yaml  (targets are labels: "Email", "Password", submit)
       │
       ▼
  cli.py ──▶ probe env ──▶ connect device ──▶ install APK ──▶ for each step:
-                                                   observe(before)
-                                                   act  (tap / type / swipe)   ← resolver: id→text→desc→OCR
-                                                   settle
-                                                   observe(after)
-                                                   validate  ← hierarchy → OCR → change
-                                                   write evidence (png + xml + json)
+                                     PERCEIVE  observe(before) → ScreenObservation
+                                     RESOLVE   id → cache(learned) → rank(label) → OCR
+                                     RECOVER   scroll / hide-keyboard / dismiss-dialog
+                                     ACT       tap / type / submit
+                                     OBSERVE   settle → observe(after)
+                                     VALIDATE  text_exists / not_visible / *_changed
+                                     RECORD    png + xml + json  (+ learned id → bindings.json)
       │
       ▼
- reports/<run_id>/report.html   (per-step: resolved_by, validated_by, screenshots)
+ reports/<run_id>/report.html   (per step: resolved_by, validated_by, failure_reason)
+ .selector-cache/<package>.json (label → real id, reused next run; self-heals)
 ```
 
-Nothing in the engine talks to Android except `engine/device.py`, which is why
-the whole thing is unit-tested against a fake device with no hardware.
+No manual id editing: a target of `"Login"` is ranked against the live screen
+and bound to `…:id/login` automatically. Nothing in the engine talks to Android
+except `engine/device.py`, so the whole thing is unit-tested against a fake
+device with no hardware.
+
+---
+
+## The new flow in practice — bring any app, write no ids
+
+This is the whole point of the rework: you do **not** hand-write selectors. The
+loop to bring up a brand-new app (say `com.example.app`) is three steps.
+
+**Step 1 — install and inspect the screen (debug mode, no test file).** This is
+how you *see* what the engine sees and get the real ids for free:
+
+```powershell
+adb install apps.apk                       # or install-multiple for a split bundle
+adb shell monkey -p com.example.app -c android.intent.category.LAUNCHER 1
+py cli.py inspect --label home             # scan the CURRENT screen
+```
+
+`inspect` writes `screens\home\` = `screenshot.png`, `hierarchy.xml`,
+`observation.json`, and `inventory.md` (a table of every element: kind, real
+`resource_id`, text, flags, bounds) plus the screen's **structural
+fingerprint**. Run it again after each navigation (`--label login`,
+`--label cart`) to map a multi-screen story. No YAML, no editing — just look.
+
+**Step 2 — write the test as intent.** Use the *visible labels* you saw; the
+engine binds them to the ids from step 1 at run time:
+
+```yaml
+name: "Login"
+package: com.example.app
+data: { email: test@example.com, password: Password123 }
+steps:
+  - action: launch
+  - action: enter_text
+    target: "Email"          # label, not id
+    value: "{{email}}"
+  - action: enter_text
+    target: "Password"
+    value: "{{password}}"
+  - action: submit           # finds the login/submit button itself
+  - assert: { type: activity_changed }
+  - assert: { type: text_exists, value: "Welcome" }
+```
+
+**Step 3 — run it.** The engine perceives, resolves each label, taps/types,
+validates, and records everything:
+
+```powershell
+py cli.py --apk apps.apk --test testcases\login.yaml
+```
+
+Open `reports\<run_id>\report.html` for the per-step evidence, and
+`reports\<run_id>\bindings.json` for the **label → real id** map it learned
+(also cached to `.selector-cache\com.example.app.json` and reused next run). If a
+step can't find its target, the report gives a `failure_reason` plus ranked
+**suggestions** of the real on-screen selectors — paste the right label back and
+re-run. Full reference in [§9b](#9b-semantic-targets-auto-binding-inspect--replay).
+
+> **Popups & permissions** (e.g. a notification prompt, "While using the app")
+> are auto-dismissed by the recovery layer before the target is sought, so a
+> first-run dialog doesn't break the flow. `inspect` shows the dialog too, with a
+> `dialog` window flag.
 
 ---
 
@@ -122,28 +190,10 @@ Cold boot can take 2–5 minutes. Diagnose everything at once:
 py cli.py --check-env      # every row FOUND, "Live runner: READY"
 ```
 
-**Expected output:**
-
-```
-Mobile QA Environment
-────────────────────────────────────────────────
-  python         ✓ FOUND    (required)  3.12.5
-  adb            ✓ FOUND    (required for live run)  ...\platform-tools\adb.EXE
-  aapt           ✓ FOUND    (required for live run)  ...\build-tools\34.0.0\aapt.EXE
-  tesseract      ✓ FOUND    (required)  ...\Tesseract-OCR\tesseract.EXE
-  emulator       ✓ FOUND    (optional)  ...\emulator\emulator.EXE
-  uiautomator2   ✓ FOUND    (required for live run)
-  pytesseract    ✓ FOUND    (required)
-  Pillow         ✓ FOUND    (required)
-  pyyaml         ✓ FOUND    (required)
-  device         ✓ FOUND    (required for live run)  emulator-5554
-────────────────────────────────────────────────
-  Core tests:  READY
-  Live runner: READY
-```
-
-If `device` is `MISSING`, the runner is `BLOCKED` — boot the emulator (§2). Every
-other `MISSING` row names the tool to install.
+It prints one row per tool (python, adb, aapt, tesseract, emulator,
+uiautomator2, pytesseract, Pillow, pyyaml, device) plus `Core tests` and
+`Live runner` readiness. If `device` is `MISSING`, the runner is `BLOCKED` —
+boot the emulator (§2). Every other `MISSING` row names the tool to install.
 
 ---
 
@@ -156,22 +206,9 @@ without a device:
 py cli.py --dry-run --test testcases\login.yaml
 ```
 
-**Expected output** (the plan, then the env table; exits 0, no device touched):
-
-```
-Test case: Login with valid credentials
-Package:   com.example.shop
-Data:      email=test@example.com, password=Password123
-
-Step plan (7 steps):
-   0. launch
-   1. type target={'id': 'com.example.shop:id/email'} value='{{email}}'
-   2. type target={'id': 'com.example.shop:id/password'} value='{{password}}'
-   3. tap  target={'text': 'Login'}
-   4. assert text_exists value='Welcome'
-   5. assert ocr_text_exists value='PAY NOW'
-   6. assert screen_changed
-```
+It prints the parsed test case (name, package, data) and the numbered step plan,
+exits `0`, and never touches a device — use it to sanity-check a YAML before a
+live run.
 
 Then the real end-to-end run — install → launch → type → tap → validate:
 
@@ -179,19 +216,12 @@ Then the real end-to-end run — install → launch → type → tap → validat
 py cli.py --apk sample-app\build\shop-login.apk --test testcases\login.yaml
 ```
 
-**Expected output:**
-
-```
-Overall: PASS
-Steps:  PASS=7
-Report: reports\20260914-140831\report.html
-```
-
-The `run_id` (`20260914-140831`) is a timestamp, so it differs every run. Per
-step the report shows **how** the target was found (`resolved_by`: `resource_id`
-/ `text_exact`) and **how** the outcome was confirmed (`validated_by`:
-`hierarchy` / `ocr` / `change`). The `PAY NOW` line is validated by real OCR of
-the screenshot. Exit code is `0` on PASS, `1` on FAIL.
+It prints `Overall: PASS`, a per-status step count, and the path to a fresh
+`reports\<run_id>\report.html`. The `run_id` is a timestamp, so it differs every
+run. Per step the report shows **how** the target was found (`resolved_by`:
+`resource_id` / `text_exact` / `ranked` / `cache` / `ocr`) and **how** the
+outcome was confirmed (`validated_by`: `hierarchy` / `ocr` / `change`). Exit code
+is `0` on PASS, `1` on FAIL.
 
 ---
 
@@ -205,13 +235,8 @@ Wrong password → the app shows "Invalid credentials". The screen *changes*, bu
 `text_exists("Welcome")` must still **FAIL**. This is the guard that
 change-detection never masks a failed assertion.
 
-**Expected output** (exit code `1`):
-
-```
-Overall: FAIL
-Steps:  PASS=4 · FAIL=1
-Report: reports\20260914-141014\report.html
-```
+It prints `Overall: FAIL` (exit code `1`) with the failing step counted — the
+`text_exists("Welcome")` assert fails even though the screen changed.
 
 ---
 
@@ -225,15 +250,8 @@ py cli.py --apk apks\nextcloud.apk --test testcases\nextcloud_login.yaml
 Drives Nextcloud's real login screen: open login → type a server address →
 submit → the app reports "Could not find host" (validated by `hierarchy`) plus a
 `screen_changed`. Real credential login needs a live server/account, so this
-validates the reachable, offline-deterministic part of the flow.
-
-**Expected output:**
-
-```
-Overall: PASS
-Steps:  PASS=6
-Report: reports\20260914-142249\report.html
-```
+validates the reachable, offline-deterministic part of the flow. It prints
+`Overall: PASS` with the report path.
 
 ---
 
@@ -256,25 +274,8 @@ py examples\manual_flow.py --serial emulator-5554 `
   --expect-text "Could not find host" --expect-ocr ""
 ```
 
-**Expected output** (defaults / sample app):
-
-```
-connected: emulator-5554
-
-[0] launch com.example.shop
-    activity: .MainActivity
-[1] type email -> com.example.shop:id/email
-[2] type password -> com.example.shop:id/password
-[3] tap login
-
-[4] validate
-    text_exists 'Welcome'      -> PASS  validated_by=hierarchy
-    ocr_text_exists 'PAY NOW'  -> PASS  validated_by=ocr
-
-screenshots in ...\manual-demo
-```
-
-It prints each step and the validator verdict, saving `01_launched.png` …
+It prints each perceive/act/validate step and the validator verdict
+(`validated_by=hierarchy` / `ocr`), saving `01_launched.png` …
 `04_after_login.png` to `manual-demo\` (that folder is scratch / git-ignored).
 
 ---
@@ -283,13 +284,6 @@ It prints each step and the validator verdict, saving `01_launched.png` …
 
 ```powershell
 py -m pytest -q      # expect all green
-```
-
-**Expected output:**
-
-```
-......................................................                   [100%]
-54 passed in 5.63s
 ```
 
 The engine is verified against a scripted `FakeDevice` + screenshots that real
@@ -307,19 +301,9 @@ Start-Process "reports\$($run.Name)\report.html"
 Get-Content "reports\$($run.Name)\timeline.json" | ConvertFrom-Json | Format-Table index,status,action,resolved_by,validated_by
 ```
 
-**Expected `timeline.json` shape** (one row per step):
-
-```
-index status  action                  resolved_by  validated_by
------ ------  ------                  -----------  ------------
-    0 PASS    launch
-    1 PASS    type                    resource_id
-    2 PASS    type                    resource_id
-    3 PASS    tap                     text_exact
-    4 PASS    assert:text_exists                   hierarchy
-    5 PASS    assert:ocr_text_exists               ocr
-    6 PASS    assert:screen_changed                change
-```
+`timeline.json` has one row per step — `index`, `status`, `action`,
+`resolved_by` (how the target was found) and `validated_by` (how the outcome was
+confirmed) — which is what the table above renders.
 
 ---
 
@@ -371,6 +355,38 @@ reports/<run_id>/
 
 There is **no committed demo folder** — each run generates its own
 `reports/<run_id>/` (git-ignored). To share one, zip that whole folder.
+
+---
+
+## 9b. Semantic targets, auto-binding, inspect & replay
+
+You don't have to hard-code `resource-id`s. A target can be a **label** and the
+engine resolves it on the live screen, then caches the real id per screen
+(`reports/<run_id>/bindings.json` + `.selector-cache/<package>.json`, reused on
+later runs; a stale binding self-heals).
+
+```yaml
+- action: enter_text
+  target: "Email"          # a string label — no id needed
+  value: "{{email}}"
+- action: submit           # finds the submit/login button itself
+- assert: { type: activity_changed }
+- assert: { type: not_visible, value: "Loading" }
+```
+
+Actions: `tap · type · enter_text · submit · long_click · swipe · back · wait`.
+Asserts add `not_visible` and `activity_changed`. A tap/submit auto-dismisses the
+keyboard first. A failed step reports a precise `failure_reason`
+(`TARGET_NOT_FOUND`, `UNEXPECTED_SCREEN`, …) plus ranked **suggestions** of the
+real on-screen selectors.
+
+Fetch any screen's selectors, or re-print a finished run, with no re-execution:
+
+```powershell
+py cli.py inspect --label login     # → screens/login/{observation.json,hierarchy.xml,screenshot.png,inventory.md}
+py cli.py replay                    # re-print the latest run's verdicts
+py cli.py doctor                    # environment check
+```
 
 ---
 
