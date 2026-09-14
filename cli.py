@@ -139,7 +139,89 @@ def cmd_inspect(args: argparse.Namespace) -> int:
               "surface; OCR of the screenshot is the perception fallback.")
     print(f"\nSaved bundle → {out_dir}\\ (observation.json, hierarchy.xml, "
           "screenshot.png, inventory.md)")
+
+    if getattr(args, "into_library", False):
+        from engine.screen_library import ScreenLibrary
+        lib = ScreenLibrary(obs.package or "app")
+        lib.add(obs, args.label, screenshot=os.path.join(out_dir, "screenshot.png"))
+        lib.save()
+        print(f"Captured into screen library → {lib.path} "
+              f"({len(lib.screens())} screen(s), fingerprint {obs.structural_fingerprint()})")
     return 0
+
+
+def cmd_screens(args: argparse.Namespace) -> int:
+    """List the pre-fetched screen library for a package (--package or from --apk)."""
+    from engine.screen_library import ScreenLibrary
+    package = args.package
+    if not package and args.apk:
+        try:
+            package = device_mod.read_apk_metadata(args.apk).get("package")
+        except Exception:
+            package = None
+    if not package:
+        print("error: pass --package <name> (or --apk to read it).", file=sys.stderr)
+        return 2
+    lib = ScreenLibrary(package)
+    screens = lib.screens()
+    if not screens:
+        print(f"No captured screens for {package}. Capture with:"
+              f"\n  py cli.py inspect --label <name> --into-library")
+        return 0
+    print(f"Screen library — {package}  ({len(screens)} screen(s))  → {lib.path}")
+    for s in screens:
+        els = s.get("elements", [])
+        tappable = sum(1 for e in els if e.get("clickable"))
+        fields = sum(1 for e in els if e.get("editable"))
+        print(f"  • {s['label']:16} activity={s.get('activity')}"
+              f"  fp={s.get('structural_fingerprint')}"
+              f"  elements={len(els)} (tappable={tappable}, fields={fields})")
+    return 0
+
+
+def cmd_web(args: argparse.Namespace) -> int:
+    """Launch the local web control panel (static HTML + stdlib server)."""
+    from webapp.server import serve
+    serve(port=int(args.port))
+    return 0
+
+
+def cmd_preflight(args: argparse.Namespace) -> int:
+    """Match a test case's targets against the captured screen library, so you
+    know before a live run which targets are already known and which aren't."""
+    from engine.loader import load_testcase
+    from engine.screen_library import ScreenLibrary
+    from engine import inspect as ins
+    tc = load_testcase(args.test)
+    package = tc["package"]
+    lib = ScreenLibrary(package)
+    if not lib.screens():
+        print(f"No screen library for {package} — capture screens first:"
+              f"\n  py cli.py inspect --label <name> --into-library")
+        return 2
+    print(f"Preflight — {tc['name']}  ({package}, {len(lib.screens())} captured screen(s))")
+    unknown = 0
+    for i, step in enumerate(tc.get("steps", [])):
+        if "action" not in step:
+            continue
+        target = step.get("target")
+        if not target:
+            continue
+        query = target if isinstance(target, str) else (
+            target.get("label") or target.get("text") or target.get("desc")
+            or (target.get("id", "").rsplit("/", 1)[-1] if target.get("id") else ""))
+        if not query:
+            continue
+        role = "field" if step["action"] in ("type", "enter_text") else "tappable"
+        bearing = lib.find_bearing(query, role)
+        if bearing:
+            print(f"  [{i}] {step['action']:10} {query!r:24} ✓ found on '{bearing['label']}'"
+                  f" near {bearing['center']}")
+        else:
+            unknown += 1
+            print(f"  [{i}] {step['action']:10} {query!r:24} ✗ not in any captured screen")
+    print(f"\n{'All targets known.' if not unknown else str(unknown) + ' target(s) not captured — capture those screens, or they will be resolved live at run time.'}")
+    return 0 if unknown == 0 else 1
 
 
 def cmd_replay(args: argparse.Namespace) -> int:
@@ -262,21 +344,40 @@ def build_parser() -> argparse.ArgumentParser:
                    help="Where --inspect writes screen bundles (default: screens).")
     p.add_argument("--from-report",
                    help="For replay: path to a run's timeline.json (default: latest).")
+    p.add_argument("--into-library", action="store_true",
+                   help="With inspect: also capture the screen into the reusable "
+                        "per-app screen library (screens/<pkg>/library.json).")
+    p.add_argument("--package",
+                   help="Package name for the 'screens' listing (else read from --apk).")
+    p.add_argument("--preflight", action="store_true",
+                   help="Match --test's targets against the captured screen library "
+                        "(no device); reports which are known before a live run.")
+    p.add_argument("--port", default=8765,
+                   help="Port for the web control panel (default: 8765).")
     return p
 
 
 def main(argv: list[str] | None = None) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
     command = None
-    if argv and argv[0] in ("inspect", "run", "doctor", "replay"):
+    if argv and argv[0] in ("inspect", "run", "doctor", "replay", "screens", "web"):
         command = argv.pop(0)
     args = build_parser().parse_args(argv)
     if command == "doctor" or args.check_env:
         return cmd_check_env()
+    if command == "web":
+        return cmd_web(args)
     if command == "replay":
         return cmd_replay(args)
+    if command == "screens":
+        return cmd_screens(args)
     if command == "inspect" or args.inspect:
         return cmd_inspect(args)
+    if args.preflight:
+        if not args.test:
+            print("error: --preflight needs --test.", file=sys.stderr)
+            return 2
+        return cmd_preflight(args)
     if not args.test:
         print("error: --test is required for a run (or use --check-env / inspect).",
               file=sys.stderr)
