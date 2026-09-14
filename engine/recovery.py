@@ -61,6 +61,7 @@ def reach(d: Device, target: dict[str, Any],
     trace.record("immediate", "not_found")
 
     # 2. wait / retry
+    previous_screen = _screen_signature(d)
     for attempt in range(1, RECOVERY_MAX_RETRIES + 1):
         sleep(RECOVERY_RETRY_WAIT_S)
         res = _resolve(False)
@@ -68,6 +69,11 @@ def reach(d: Device, target: dict[str, Any],
             trace.record("retry", "resolved", f"attempt {attempt} via {res.strategy}")
             return res, trace
         trace.record("retry", "not_found", f"attempt {attempt}")
+        current_screen = _screen_signature(d)
+        if current_screen and current_screen == previous_screen:
+            trace.record("retry", "skipped", "screen unchanged; escalating")
+            break
+        previous_screen = current_screen or previous_screen
 
     # 3. dismiss keyboard if it's covering the target
     if _safe(d.keyboard_visible):
@@ -110,6 +116,7 @@ def reach(d: Device, target: dict[str, Any],
         trace.record("post_dialog", "not_found")
 
     # 4. scroll into view
+    previous_screen = _screen_signature(d)
     for i in range(1, RECOVERY_MAX_SCROLLS + 1):
         try:
             d.scroll_forward()
@@ -122,6 +129,11 @@ def reach(d: Device, target: dict[str, Any],
             trace.record("post_scroll", "resolved", f"pass {i} via {res.strategy}")
             return res, trace
         trace.record("post_scroll", "not_found", f"pass {i}")
+        current_screen = _screen_signature(d)
+        if current_screen and current_screen == previous_screen:
+            trace.record("post_scroll", "skipped", "scroll produced no screen change")
+            break
+        previous_screen = current_screen or previous_screen
 
     # 5. OCR fallback (last resort)
     res = _resolve(True)
@@ -138,3 +150,11 @@ def _safe(fn):
         return fn()
     except Exception:
         return None
+
+
+def _screen_signature(d: Device) -> tuple[Optional[str], Optional[str]]:
+    """Cheap progress signal used to avoid repeating no-op recovery work."""
+    try:
+        return d.current_activity(), d.dump_hierarchy()
+    except Exception:
+        return None, None

@@ -143,6 +143,15 @@ def resolve(d: Device, target: dict[str, Any], *,
     if query and elements:
         cands = inspect_mod.rank_candidates(query, elements, role=role)
         result.candidates = [c.as_dict() for c in cands]
+        rejected = [c for c in cands if c.base >= RESOLVE_MIN_SCORE
+                    and not _role_ok(c.element, role)]
+        if rejected:
+            result.record(
+                "ranked", "role_rejected",
+                query=query,
+                role=role,
+                candidates=[c.as_dict() for c in rejected],
+            )
         # accept on base text similarity AND role fitness — role bonuses only
         # order candidates; a strong text match on a wrong-role element is skipped.
         acceptable = [c for c in cands

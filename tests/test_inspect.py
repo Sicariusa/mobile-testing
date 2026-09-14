@@ -78,6 +78,20 @@ def test_rank_candidates_prefers_right_element_and_role():
     assert top_email.element.resource_id == "app:id/email"
 
 
+def test_rank_candidates_promotes_matching_label_to_clickable_card():
+    xml = ("<hierarchy><node class='android.widget.FrameLayout'>"
+           "<node class='android.view.ViewGroup' clickable='true' "
+           "bounds='[0,0][100,100]'><node class='android.widget.TextView' "
+           "text='Sauce Labs Backpack' bounds='[0,0][100,30]'/></node>"
+           "</node></hierarchy>")
+    els = inspect_mod.parse_elements(xml)
+    candidate = inspect_mod.rank_candidates(
+        "sauce labs Backpack", els, role="tappable")[0]
+    assert candidate.element.clickable
+    assert candidate.matched_label == "Sauce Labs Backpack"
+    assert "matched label on clickable ancestor" in candidate.reasons
+
+
 def test_blocked_step_reports_reason_and_suggestions(tmp_path):
     # a screen that has a near-miss button but not the requested target
     xml = ("<hierarchy><node resource-id='app:id/signin' class='android.widget.Button' "

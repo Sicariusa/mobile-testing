@@ -68,6 +68,16 @@ def test_recovery_scroll_then_resolve():
                for a in trace.attempts)
 
 
+def test_recovery_stops_redundant_retries_on_unchanged_screen():
+    screen = FakeScreen("empty", hierarchy_xml="<hierarchy></hierarchy>")
+    d = FakeDevice([screen])
+    res, trace = recovery.reach(d, {"text": "Missing"}, sleep=NOSLEEP)
+    assert res is None
+    assert any(a["outcome"] == "skipped" and "unchanged" in a["detail"]
+               for a in trace.attempts)
+    assert d.scroll_count == 1
+
+
 def test_recovery_gives_up_blocked():
     screen = FakeScreen("empty", elements=(), ocr_lines=("nothing useful here",))
     d = FakeDevice([screen])

@@ -92,7 +92,8 @@ automatically — no manual id editing.
   rejected in favour of the real control.
 - **`engine/recovery.py`** — `reach()` threads `role`/`cache`; added a
   dialog-dismissal stage (Allow / While using the app / …) driven by
-  `inspect.window_flags`.
+  `inspect.window_flags`; recovery now detects unchanged screens and stops
+  redundant retries and no-op scroll passes.
 - **`engine/runner.py`** — builds a `SelectorCache(package)`, passes it through
   execution, saves it, and writes `bindings.json`; `activity_changed` added to
   the trailing-assert set.
@@ -106,16 +107,22 @@ automatically — no manual id editing.
 
 - Rank bonus could push a weak match over threshold — separated `base` (accept)
   from `score` (order).
+- Product titles and other visible labels could be non-clickable while their
+  card/container was clickable — hierarchy parent links now let ranked tap
+  targets promote matching labels to clickable ancestors.
 - Non-clickable "Sign in" title matched `submit` before the real Login button —
   added the role gate.
 - Semantic login failed when the keyboard's IME key matched `submit` and the
   keyboard obscured the button — added keyboard auto-dismiss.
+- Recovery could appear stuck while retrying an unchanged screen, and settle
+  timeouts were silent — redundant recovery work is skipped and action details
+  record a screen settle timeout.
 - `device.py` logcat `cp1252` `UnicodeDecodeError` — decode `utf-8`,
   `errors="replace"`.
 
 ### Validated
 
-- 73 unit tests green.
+- 75 unit tests green.
 - Live semantic no-id login (`shop_login_semantic.yaml`) **PASS 6/6** on the
   `qa_test` emulator; `bindings.json` proves auto-binding
   (`email`→`…:id/email`, `password`→`…:id/password`, `log in`→`…:id/login`).

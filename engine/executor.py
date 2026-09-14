@@ -182,7 +182,9 @@ def execute(d: Device, step: dict[str, Any], *,
             failure_reason=FailureReason.DEVICE_ERROR,
         )
 
-    settle_fn(d)
+    settled = settle_fn(d)
+    if not settled:
+        detail = "screen settle timeout"
     after = observe(d, after_path)
 
     # crash gate

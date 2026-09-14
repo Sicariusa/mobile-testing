@@ -1,0 +1,32 @@
+# Negative scenario — wrong password must surface the error and NOT reach the
+# catalog. Proves the engine reports the real outcome (no false-pass).
+name: "Login — wrong password (negative)"
+package: com.swaglabsmobileapp
+launch_activity: null
+
+data:
+  username: "standard_user"
+  password: "wrong_password"
+
+steps:
+  - action: launch
+
+  - action: enter_text
+    target: "Username"
+    value: "{{username}}"
+
+  - action: enter_text
+    target: "Password"
+    value: "{{password}}"
+
+  - action: submit
+
+  # Real outcome: the app's error copy is shown...
+  - assert:
+      type: text_exists
+      value: "do not match"
+
+  # ...and we did NOT get into the app.
+  - assert:
+      type: not_visible
+      value: "PRODUCTS"

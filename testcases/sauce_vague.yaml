@@ -1,0 +1,33 @@
+# Vague targets — no exact field names, no button target. Tests the ranking:
+#   "user" -> the Username field, "pass" -> Password, bare submit -> LOGIN.
+# The engine binds each to the real element (fields have no resource-id, only
+# hint text + content-desc) and caches it.
+name: "Login — vague labels (ranking check)"
+package: com.swaglabsmobileapp
+launch_activity: null
+
+data:
+  username: "standard_user"
+  password: "secret_sauce"
+
+steps:
+  - action: launch
+
+  - action: enter_text
+    target: "user"           # fuzzy -> Username field
+    value: "{{username}}"
+
+  - action: enter_text
+    target: "pass"           # fuzzy -> Password field
+    value: "{{password}}"
+
+  - action: submit           # no target -> finds LOGIN itself
+
+  - assert:
+      type: text_exists
+      value: "PRODUCTS"
+
+  # SwagLabs is single-activity (login + catalog share .MainActivity), so assert
+  # the visual transition, not an activity change.
+  - assert:
+      type: screen_changed

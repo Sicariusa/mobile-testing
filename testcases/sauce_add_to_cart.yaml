@@ -1,0 +1,59 @@
+# Vague add-to-cart flow — no resource-ids, labels only.
+#   login (fuzzy) -> open a product -> add to cart -> the button flips to REMOVE
+#   and the cart count appears -> go back to the catalog -> the product's state
+#   persisted: button is still REMOVE and the cart still shows 1.
+# NOTE: SwagLabs shows a cart-badge count (its "popup"/feedback), not a modal.
+name: "Add to cart — vague, verify button flip + cart persists"
+package: com.swaglabsmobileapp
+launch_activity: null
+
+data:
+  username: "standard_user"
+  password: "secret_sauce"
+
+steps:
+  - action: launch
+
+  # --- login (fuzzy labels) ---
+  - action: enter_text
+    target: "user"
+    value: "{{username}}"
+  - action: enter_text
+    target: "pass"
+    value: "{{password}}"
+  - action: submit
+  - assert:
+      type: text_exists
+      value: "PRODUCTS"
+
+  # --- select a product (partial name) ---
+  - action: tap
+    target: "sauce labs Backpack"
+  - assert:
+      type: screen_changed
+
+  # --- add it to the cart ---
+  - action: tap
+    target: "add to cart"
+
+  # feedback: button flips to REMOVE and the cart count shows up
+  - assert:
+      type: text_exists
+      value: "REMOVE"
+  - assert:
+      type: element_exists
+      text: "1"
+
+  # --- back to the catalog/home ---
+  - action: back
+  - assert:
+      type: text_exists
+      value: "PRODUCTS"
+
+  # --- state persisted on the catalog ---
+  - assert:
+      type: text_exists
+      value: "REMOVE"
+  - assert:
+      type: element_exists
+      text: "1"

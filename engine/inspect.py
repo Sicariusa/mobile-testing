@@ -51,6 +51,7 @@ class Element:
     bounds: dict[str, Any] = field(default_factory=lambda: {"center": (0, 0)})
     index: int = 0
     depth: int = 0
+    parent_index: int = -1
 
     def label(self) -> str:
         """Best human-facing label: visible text, else desc, else the id tail."""
@@ -86,6 +87,7 @@ class Element:
             "focused": self.focused, "enabled": self.enabled,
             "selected": self.selected, "bounds": self.bounds,
             "index": self.index, "depth": self.depth,
+            "parent_index": self.parent_index,
         }
 
 
@@ -103,9 +105,10 @@ def parse_elements(hierarchy_xml: Optional[str]) -> list[Element]:
 
     out: list[Element] = []
 
-    def walk(node: ET.Element, depth: int) -> None:
+    def walk(node: ET.Element, depth: int, parent_index: int = -1) -> None:
         if node.tag == "node":
             cls = node.get("class", "")
+            element_index = len(out)
             out.append(Element(
                 resource_id=node.get("resource-id", ""),
                 text=node.get("text", ""),
@@ -122,9 +125,11 @@ def parse_elements(hierarchy_xml: Optional[str]) -> list[Element]:
                 bounds=_parse_bounds(node.get("bounds")),
                 index=int(node.get("index", "0") or 0),
                 depth=depth,
+                parent_index=parent_index,
             ))
+            parent_index = element_index
         for child in node:
-            walk(child, depth + 1)
+            walk(child, depth + 1, parent_index)
 
     walk(root, 0)
     return out
@@ -225,14 +230,16 @@ class Candidate:
     score: float                       # base + role bonuses (ordering)
     reasons: list[str] = field(default_factory=list)
     base: float = 0.0                  # pure text/desc/id similarity (acceptance)
+    matched_label: str = ""
 
     def as_dict(self) -> dict[str, Any]:
         e = self.element
         return {
-            "label": e.label(), "kind": e.kind(),
+            "label": e.label() or self.matched_label, "kind": e.kind(),
             "resource_id": e.resource_id, "text": e.text,
             "content_desc": e.content_desc, "score": round(self.score, 3),
             "base": round(self.base, 3), "reasons": self.reasons,
+            "matched_label": self.matched_label or None,
         }
 
 
@@ -254,6 +261,19 @@ def rank_candidates(query: str, elements: list[Element],
     Deterministic — an AI ranker can later replace this behind the same signature.
     """
     cands: list[Candidate] = []
+    by_position = {position: element for position, element in enumerate(elements)}
+
+    def clickable_ancestor(element: Element) -> Optional[Element]:
+        parent_index = element.parent_index
+        while parent_index >= 0:
+            parent = by_position.get(parent_index)
+            if parent is None:
+                break
+            if parent.clickable and parent.enabled:
+                return parent
+            parent_index = parent.parent_index
+        return None
+
     for e in interesting(elements):
         id_tail = e.resource_id.rsplit("/", 1)[-1] if e.resource_id else ""
         base = max(_ratio(query, e.text), _ratio(query, e.content_desc), _ratio(query, id_tail))
@@ -270,9 +290,28 @@ def rank_candidates(query: str, elements: list[Element],
             score -= 0.2
             reasons.append("disabled -0.20")
         if score > 0:
-            cands.append(Candidate(e, score, reasons, base=base))
+            cands.append(Candidate(e, score, reasons, base=base,
+                                   matched_label=e.label()))
+            if role == "tappable" and not e.clickable and base >= 0.60:
+                ancestor = clickable_ancestor(e)
+                if ancestor is not None:
+                    ancestor_reasons = list(reasons)
+                    ancestor_reasons.append("matched label on clickable ancestor")
+                    cands.append(Candidate(
+                        ancestor, base + 0.1, ancestor_reasons, base=base,
+                        matched_label=e.label()))
     cands.sort(key=lambda c: c.score, reverse=True)
-    return cands[:limit]
+    unique: list[Candidate] = []
+    seen: set[int] = set()
+    for candidate in cands:
+        identity = id(candidate.element)
+        if identity in seen:
+            continue
+        seen.add(identity)
+        unique.append(candidate)
+        if len(unique) == limit:
+            break
+    return unique
 
 
 # --- human-readable inventory ------------------------------------------------

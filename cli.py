@@ -187,8 +187,58 @@ def cmd_run(args: argparse.Namespace) -> int:
     print()
     print(f"Overall: {result['overall']}")
     print("Steps:  " + " · ".join(f"{k}={v}" for k, v in result["counts"].items()))
+    if result["overall"] != "PASS":
+        _print_diagnostics(result.get("results") or [])
     print(f"Report: {result['report_path']}")
     return 0 if result["overall"] == "PASS" else 1
+
+
+def _print_diagnostics(results: list) -> None:
+    """Surface why a run didn't pass: for each non-PASS step print the reason,
+    the screen it was on, and the nearest on-screen matches the resolver ranked —
+    so a BLOCKED/FAIL is actionable from the terminal, not just timeline.json."""
+    rows = [(i, r) for i, r in enumerate(results)
+            if getattr(r, "status", None) and str(r.status.value) != "PASS"]
+    if not rows:
+        return
+    print("\nDiagnostics (non-passing steps)")
+    print("─" * 60)
+    skipped: list[int] = []
+    for i, r in rows:
+        status = r.status.value
+        if status == "SKIPPED":
+            skipped.append(i)
+            continue
+        tgt = getattr(r, "target", None)
+        print(f"[{i}] {status}  {getattr(r, 'action', '?') or 'assert'}"
+              + (f"  target={tgt}" if tgt else ""))
+        reason = getattr(r, "failure_reason", None)
+        detail = getattr(r, "detail", "") or getattr(r, "error", "")
+        if reason or detail:
+            print(f"     reason:  {reason or ''}{' — ' if reason and detail else ''}{detail}")
+        summ = getattr(r, "screen_summary", None)
+        if summ:
+            win = summ.get("window") or {}
+            print(f"     screen:  {summ.get('activity')} · {summ.get('element_count')} elements"
+                  f" · dialog={win.get('dialog')} keyboard={win.get('keyboard')}")
+        sugg = getattr(r, "suggestions", None) or []
+        if sugg:
+            print("     nearest on-screen matches (score · kind · label):")
+            seen = set()
+            for c in sugg:
+                key = (c.get("kind"), c.get("text"), c.get("content_desc"), c.get("resource_id"))
+                if key in seen:
+                    continue
+                seen.add(key)
+                lbl = (c.get("text") or c.get("content_desc")
+                       or c.get("resource_id") or "").strip() or "(no label)"
+                print(f"        {c.get('score', 0):.2f}  {c.get('kind', ''):6}  {lbl!r}")
+            print("     → nothing scored ≥ 0.60; retarget using one of the labels above.")
+    if skipped:
+        lo, hi = skipped[0], skipped[-1]
+        span = f"[{lo}]" if lo == hi else f"[{lo}–{hi}]"
+        print(f"{span} SKIPPED — run aborted after the blocked/failed step above.")
+    print("─" * 60)
 
 
 def build_parser() -> argparse.ArgumentParser:
