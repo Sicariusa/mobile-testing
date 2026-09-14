@@ -12,8 +12,19 @@ venv/
 
 # APKs dropped in for local runs
 *.apk
+apks/
+
+# Sample-app build intermediates (rebuild with sample-app/build.ps1)
+sample-app/build/
+
+# Scratch screenshots from examples/manual_flow.py (curated demos live in docs/demo/)
+manual-demo/
 
 # OS / editor
 .DS_Store
 .idea/
 .vscode/
+
+/graphify-out
+
+docs/demo/

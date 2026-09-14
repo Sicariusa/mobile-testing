@@ -22,13 +22,27 @@ from PIL import Image, ImageDraw, ImageFont
 from engine.device import Device, Element
 from engine import models
 
-_FONT_PATH = "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf"
+# Candidate scalable fonts across Linux/Windows/macOS; first that loads wins.
+# A scalable TTF is required for OCR — Pillow's bitmap default is too small to
+# read multi-word phrases reliably.
+_FONT_CANDIDATES = (
+    "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
+    "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+    "arial.ttf",  # Windows resolves by name from the system fonts dir
+    "DejaVuSans.ttf",
+    "/System/Library/Fonts/Supplemental/Arial.ttf",
+)
 
 
 def _font(size: int = 40):
-    try:
-        return ImageFont.truetype(_FONT_PATH, size)
-    except Exception:  # pragma: no cover - font-availability dependent
+    for path in _FONT_CANDIDATES:
+        try:
+            return ImageFont.truetype(path, size)
+        except Exception:
+            continue
+    try:  # Pillow >= 10.1 renders its default at an explicit size
+        return ImageFont.load_default(size)
+    except TypeError:  # pragma: no cover - older Pillow
         return ImageFont.load_default()
 
 

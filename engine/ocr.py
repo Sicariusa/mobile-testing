@@ -12,9 +12,10 @@ so "PAY NOW" matches even though Tesseract returns two word boxes.
 from __future__ import annotations
 
 import re
+from functools import lru_cache
 from typing import Any, Optional
 
-from .config import OCR_MIN_CONFIDENCE
+from .config import OCR_BACKEND, OCR_MIN_CONFIDENCE
 
 
 def _normalise(s: str) -> str:
@@ -25,10 +26,20 @@ def _tokens(s: str) -> list[str]:
     return _normalise(s).split()
 
 
-def _load_words(image_path: str) -> list[dict[str, Any]]:
-    """Return per-word OCR entries with normalised text, confidence 0..1, bounds
-    and a stable line id. Import-lazy so the module imports without Tesseract.
+def _load_words(image_path: str, backend: Optional[str] = None) -> list[dict[str, Any]]:
+    """Return per-word OCR entries (normalised text, confidence 0..1, bounds and
+    a stable line id) from the configured backend. Backends are imported lazily,
+    so this module imports fine whether or not either engine is installed.
     """
+    backend = backend or OCR_BACKEND
+    if backend == "tesseract":
+        return _load_words_tesseract(image_path)
+    if backend == "easyocr":
+        return _load_words_easyocr(image_path)
+    raise ValueError(f"unknown OCR_BACKEND: {backend!r} (use 'tesseract' or 'easyocr')")
+
+
+def _load_words_tesseract(image_path: str) -> list[dict[str, Any]]:
     import pytesseract
     from PIL import Image
 
@@ -57,6 +68,47 @@ def _load_words(image_path: str) -> list[dict[str, Any]]:
             "height": int(data["height"][i]),
             "line": (int(data["block_num"][i]), int(data["par_num"][i]), int(data["line_num"][i])),
         })
+    return words
+
+
+@lru_cache(maxsize=1)
+def _easyocr_reader(langs: tuple[str, ...]):
+    import easyocr  # heavy (torch); only imported when the easyocr backend runs
+
+    return easyocr.Reader(list(langs), gpu=False)
+
+
+def _load_words_easyocr(image_path: str, langs: tuple[str, ...] = ("en",)) -> list[dict[str, Any]]:
+    """EasyOCR returns line-level detections; split each into words that share
+    the line's box and confidence so the phrase-window matcher works unchanged.
+    """
+    try:
+        _easyocr_reader(langs)
+    except ImportError as exc:
+        raise RuntimeError(
+            "OCR_BACKEND='easyocr' but easyocr is not installed — "
+            "`pip install easyocr` (pulls in torch), or set OCR_BACKEND='tesseract'."
+        ) from exc
+
+    reader = _easyocr_reader(langs)
+    words: list[dict[str, Any]] = []
+    for line_idx, (box, text, conf) in enumerate(reader.readtext(image_path)):
+        if not text or not text.strip():
+            continue
+        xs = [p[0] for p in box]
+        ys = [p[1] for p in box]
+        left, top, right, bottom = int(min(xs)), int(min(ys)), int(max(xs)), int(max(ys))
+        for tok in text.split():
+            words.append({
+                "text": tok,
+                "norm": _normalise(tok),
+                "conf": float(conf),
+                "left": left,
+                "top": top,
+                "width": right - left,
+                "height": bottom - top,
+                "line": (line_idx,),
+            })
     return words
 
 

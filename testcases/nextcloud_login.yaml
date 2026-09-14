@@ -1,0 +1,37 @@
+# Live login flow against a real open-source app (Nextcloud, from F-Droid).
+#
+# Nextcloud's real credential login needs a live server + account, so this
+# exercises the reachable, deterministic part of the login flow offline:
+# open the login screen, enter a server address, submit, and confirm the app
+# reacts (a "Could not find host" error + a state transition). It proves the
+# runner drives a real third-party app end to end: resolve by resource-id,
+# type, tap, then validate via hierarchy + change detection.
+name: "Nextcloud login — server address validation"
+package: com.nextcloud.client
+launch_activity: com.nmc.android.ui.LauncherActivity
+
+data:
+  server: "https://try.nextcloud.example"
+
+steps:
+  - action: launch
+
+  - action: tap
+    target: { id: "com.nextcloud.client:id/login" }
+
+  - action: type
+    target: { id: "com.nextcloud.client:id/host_url_input" }
+    value: "{{server}}"
+
+  - action: tap
+    target: { id: "com.nextcloud.client:id/text_input_end_icon" }
+
+  # The app resolves the host offline and reports failure — a real, deterministic
+  # outcome in the accessibility tree.
+  - assert:
+      type: text_exists
+      value: "Could not find host"
+
+  # And the submit produced a visible state transition.
+  - assert:
+      type: screen_changed

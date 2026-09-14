@@ -8,9 +8,14 @@ threshold or timeout.
 from __future__ import annotations
 
 # --- OCR ---------------------------------------------------------------------
-# Minimum Tesseract confidence (0..1) for an OCR match to count as a real hit.
-# Tesseract reports 0..100; ocr.py normalises to 0..1 before comparing.
+# Minimum confidence (0..1) for an OCR match to count as a real hit. Tesseract
+# reports 0..100; ocr.py normalises to 0..1 before comparing.
 OCR_MIN_CONFIDENCE: float = 0.60
+
+# OCR engine: "tesseract" (default, no extra deps) or "easyocr" (optional, more
+# robust on stylised text; `pip install easyocr`, pulls in torch). ocr.py loads
+# the chosen backend lazily, so importing it never requires the optional one.
+OCR_BACKEND: str = "tesseract"
 
 # --- Change detection --------------------------------------------------------
 # A "screen_changed" assertion passes when the before/after difference ratio
@@ -22,6 +27,11 @@ CHANGE_MIN: float = 0.02
 # --- Stabilisation (settle) --------------------------------------------------
 SETTLE_TIMEOUT_S: float = 5.0        # give up waiting for a stable screen after this
 SETTLE_POLL_INTERVAL_S: float = 0.3  # gap between the two hierarchy dumps we compare
+# Optional stronger settle: also require two screenshots to be pixel-stable
+# (animation/frame idle), not just the hierarchy. Off by default — it costs two
+# extra captures per settle. SCREEN_EPSILON is the max change_ratio still "idle".
+SETTLE_REQUIRE_SCREEN_STABLE: bool = False
+SETTLE_SCREEN_EPSILON: float = 0.02
 
 # --- Recovery bounds ---------------------------------------------------------
 RECOVERY_MAX_RETRIES: int = 3        # wait/retry attempts before escalating

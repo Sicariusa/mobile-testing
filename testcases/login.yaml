@@ -14,9 +14,6 @@ data:
 steps:
   - action: launch
 
-  - action: tap
-    target: { text: "Login" }
-
   - action: type
     target: { id: "com.example.shop:id/email" }
     value: "{{email}}"

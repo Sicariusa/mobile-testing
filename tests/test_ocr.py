@@ -32,3 +32,27 @@ def test_ocr_is_case_insensitive(tmp_path):
     img = render_text(str(tmp_path / "s.png"), ["Login"])
     found, _ = ocr.ocr_text_exists(img, "login")
     assert found
+
+
+def test_default_backend_is_tesseract():
+    from engine import config
+    assert config.OCR_BACKEND == "tesseract"
+
+
+def test_unknown_backend_raises(tmp_path):
+    img = render_text(str(tmp_path / "s.png"), ["hi"])
+    import pytest
+    with pytest.raises(ValueError):
+        ocr._load_words(img, backend="does-not-exist")
+
+
+def test_easyocr_backend_reports_clearly_when_missing(tmp_path):
+    # Only meaningful when easyocr isn't installed: selecting it must raise an
+    # actionable RuntimeError, not an obscure ImportError deep in the matcher.
+    import importlib.util
+    import pytest
+    if importlib.util.find_spec("easyocr") is not None:
+        pytest.skip("easyocr installed; missing-backend path not exercised")
+    img = render_text(str(tmp_path / "s.png"), ["hi"])
+    with pytest.raises(RuntimeError, match="easyocr"):
+        ocr._load_words(img, backend="easyocr")

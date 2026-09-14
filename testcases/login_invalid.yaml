@@ -1,0 +1,31 @@
+# Negative path — wrong password. The app stays on the login screen and shows
+# "Invalid credentials". The screen DOES change (error text appears), so this
+# case proves change-detection never false-passes a text_exists("Welcome"):
+# expected overall result is FAIL.
+name: "Login rejects invalid credentials"
+package: com.example.shop
+launch_activity: null
+
+data:
+  email: test@example.com
+  password: WrongPassword
+
+steps:
+  - action: launch
+
+  - action: type
+    target: { id: "com.example.shop:id/email" }
+    value: "{{email}}"
+
+  - action: type
+    target: { id: "com.example.shop:id/password" }
+    value: "{{password}}"
+
+  - action: tap
+    target: { text: "Login" }
+
+  # Must FAIL: "Welcome" is neither in the hierarchy nor on screen. A tap that
+  # produced an error screen must not satisfy the success assertion.
+  - assert:
+      type: text_exists
+      value: "Welcome"

@@ -162,7 +162,10 @@ class AndroidDevice(Device):
         if self.serial:
             cmd += ["-s", self.serial]
         cmd += list(args)
-        out = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+        # Force UTF-8 + replace: logcat/dumpsys emit bytes the Windows locale
+        # (cp1252) cannot decode, which otherwise crashes the reader threads.
+        out = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout,
+                             encoding="utf-8", errors="replace")
         if out.returncode != 0:
             raise DeviceError(f"adb {' '.join(args)} failed: {out.stderr.strip()}")
         return out.stdout
@@ -290,7 +293,8 @@ def _adb_devices() -> list[str]:
     if shutil.which("adb") is None:
         return []
     try:
-        out = subprocess.run(["adb", "devices"], capture_output=True, text=True, timeout=15)
+        out = subprocess.run(["adb", "devices"], capture_output=True, text=True, timeout=15,
+                             encoding="utf-8", errors="replace")
     except (OSError, subprocess.TimeoutExpired):
         return []
     serials: list[str] = []
@@ -311,7 +315,8 @@ def read_apk_metadata(apk_path: str) -> dict[str, Optional[str]]:
         raise DeviceError("Neither aapt nor aapt2 found on PATH — install Android "
                           "build-tools (see docs/SETUP_ANDROID.md).")
     out = subprocess.run([tool, "dump", "badging", apk_path],
-                         capture_output=True, text=True, timeout=60)
+                         capture_output=True, text=True, timeout=60,
+                         encoding="utf-8", errors="replace")
     if out.returncode != 0:
         raise DeviceError(f"{tool} could not read {apk_path}: {out.stderr.strip()}")
     text = out.stdout
