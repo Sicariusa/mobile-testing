@@ -111,6 +111,25 @@ def validate(assertion: dict[str, Any], before: Observation, after: Observation,
         return ValidationOutcome(Status.FAIL, models.VALIDATED_CHANGE, ratio,
                                  detail=f"change ratio {ratio:.3f} < {CHANGE_MIN}")
 
+    if kind == "not_visible":
+        # inverse of text_exists — the string must be gone from tree AND screen
+        if _hierarchy_has_text(after.hierarchy_xml, expected):
+            return ValidationOutcome(Status.FAIL, models.VALIDATED_HIERARCHY, 1.0,
+                                     detail=f"'{expected}' still in hierarchy")
+        found, conf = _ocr(after, expected)
+        if found:
+            return ValidationOutcome(Status.FAIL, models.VALIDATED_OCR, conf,
+                                     detail=f"'{expected}' still visible (OCR)")
+        return ValidationOutcome(Status.PASS, models.VALIDATED_HIERARCHY, 1.0,
+                                 detail=f"'{expected}' not visible")
+
+    if kind == "activity_changed":
+        if before.activity != after.activity:
+            return ValidationOutcome(Status.PASS, models.VALIDATED_HIERARCHY, 1.0,
+                                     detail=f"activity {before.activity} -> {after.activity}")
+        return ValidationOutcome(Status.FAIL, None, None,
+                                 detail=f"activity unchanged ({after.activity})")
+
     return ValidationOutcome(Status.FAIL, None, None,
                              detail=f"unknown assertion type: {kind}")
 

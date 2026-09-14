@@ -24,7 +24,19 @@ from .config import (
 )
 from .device import Device
 from .models import RecoveryTrace, ResolutionResult
+from . import inspect as inspect_mod
 from . import resolver as resolver_mod
+
+# Buttons that dismiss a blocking system/permission dialog, in order.
+_DISMISS_LABELS = ("Allow", "While using the app", "Only this time", "OK",
+                   "Continue", "Got it", "Accept")
+
+
+def _tap(d: Device, res: ResolutionResult) -> None:
+    if res.element is not None:
+        res.element.click()
+    elif res.coordinates:
+        d.tap_xy(*res.coordinates)
 
 
 def reach(d: Device, target: dict[str, Any],
@@ -69,6 +81,33 @@ def reach(d: Device, target: dict[str, Any],
             trace.record("post_keyboard", "resolved", res.strategy or "")
             return res, trace
         trace.record("post_keyboard", "not_found")
+
+    # 3.5 dismiss a blocking dialog / permission overlay, then re-resolve
+    try:
+        els = inspect_mod.parse_elements(d.dump_hierarchy())
+    except Exception:
+        els = []
+    if inspect_mod.window_flags(els).get("dialog"):
+        dismissed = False
+        for label in _DISMISS_LABELS:
+            r = resolver_mod.resolve(d, {"label": label}, allow_ocr=False,
+                                     role="tappable")
+            if r.found:
+                _tap(d, r)
+                trace.record("dismiss_dialog", "tapped", label)
+                dismissed = True
+                break
+        if not dismissed:
+            try:
+                d.press_back()
+                trace.record("dismiss_dialog", "back")
+            except Exception as exc:
+                trace.record("dismiss_dialog", "error", str(exc))
+        res = _resolve(False)
+        if res.found:
+            trace.record("post_dialog", "resolved", res.strategy or "")
+            return res, trace
+        trace.record("post_dialog", "not_found")
 
     # 4. scroll into view
     for i in range(1, RECOVERY_MAX_SCROLLS + 1):

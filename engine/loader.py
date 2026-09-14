@@ -11,9 +11,11 @@ import yaml
 
 ASSERT_TYPES = {
     "text_exists", "ocr_text_exists", "element_exists", "activity_is", "screen_changed",
+    "not_visible", "activity_changed",
 }
-TARGETED_ACTIONS = {"tap", "type", "long_click"}
-KNOWN_ACTIONS = TARGETED_ACTIONS | {"launch", "swipe", "back", "wait"}
+TARGETED_ACTIONS = {"tap", "type", "long_click", "enter_text"}
+VALUE_ACTIONS = {"type", "enter_text"}
+KNOWN_ACTIONS = TARGETED_ACTIONS | {"launch", "swipe", "back", "wait", "submit"}
 
 
 class TestCaseError(ValueError):
@@ -67,10 +69,11 @@ def _validate_step(step: Any, i: int, source: str) -> None:
             raise TestCaseError(f"{where}: unknown action '{action}'")
         if action in TARGETED_ACTIONS and not step.get("target"):
             raise TestCaseError(f"{where}: action '{action}' requires a 'target'")
-        if action == "type" and "value" not in step:
-            raise TestCaseError(f"{where}: action 'type' requires a 'value'")
-        if step.get("target") is not None and not isinstance(step["target"], dict):
-            raise TestCaseError(f"{where}: 'target' must be a mapping")
+        if action in VALUE_ACTIONS and "value" not in step:
+            raise TestCaseError(f"{where}: action '{action}' requires a 'value'")
+        # a target may be a string label (intent) or a selector mapping
+        if step.get("target") is not None and not isinstance(step["target"], (dict, str)):
+            raise TestCaseError(f"{where}: 'target' must be a mapping or a string label")
     else:
         assertion = step["assert"]
         if not isinstance(assertion, dict):
@@ -79,7 +82,7 @@ def _validate_step(step: Any, i: int, source: str) -> None:
         if atype not in ASSERT_TYPES:
             raise TestCaseError(f"{where}: unknown assert type '{atype}' "
                                 f"(expected one of {sorted(ASSERT_TYPES)})")
-        needs_value = atype in {"text_exists", "ocr_text_exists", "activity_is"}
+        needs_value = atype in {"text_exists", "ocr_text_exists", "activity_is", "not_visible"}
         if needs_value and assertion.get("value") in (None, ""):
             raise TestCaseError(f"{where}: assert '{atype}' requires a 'value'")
 

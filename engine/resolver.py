@@ -38,6 +38,17 @@ def _query_text(target: dict[str, Any]) -> str:
     return ""
 
 
+def _role_ok(el, role: str) -> bool:
+    """A ranked match must fit the action's role: a field must be editable, a
+    tap target must be clickable. This stops a non-clickable label (e.g. a
+    'Sign in' heading) from being tapped instead of the real button."""
+    if role == "field":
+        return el.editable
+    if role == "tappable":
+        return el.clickable
+    return True
+
+
 def _concrete_selector(el) -> Optional[dict[str, Any]]:
     """A cacheable, re-findable selector for a ranked element (id > text > desc)."""
     if el.resource_id:
@@ -132,12 +143,14 @@ def resolve(d: Device, target: dict[str, Any], *,
     if query and elements:
         cands = inspect_mod.rank_candidates(query, elements, role=role)
         result.candidates = [c.as_dict() for c in cands]
-        # accept on base text similarity — role bonuses only order candidates,
-        # they must not push a weak textual match over the threshold.
-        if cands and cands[0].base >= RESOLVE_MIN_SCORE:
-            top = cands[0]
-            ambiguous = (len(cands) > 1 and cands[1].base >= RESOLVE_MIN_SCORE
-                         and (top.base - cands[1].base) < RESOLVE_AMBIGUOUS_GAP)
+        # accept on base text similarity AND role fitness — role bonuses only
+        # order candidates; a strong text match on a wrong-role element is skipped.
+        acceptable = [c for c in cands
+                      if c.base >= RESOLVE_MIN_SCORE and _role_ok(c.element, role)]
+        if acceptable:
+            top = acceptable[0]
+            ambiguous = (len(acceptable) > 1 and acceptable[1].base >= RESOLVE_MIN_SCORE
+                         and (top.base - acceptable[1].base) < RESOLVE_AMBIGUOUS_GAP)
             sel = _concrete_selector(top.element)
             bound = None
             if sel:

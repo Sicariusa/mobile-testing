@@ -41,6 +41,17 @@ def _norm_target(target):
     return target
 
 
+def _hide_keyboard(d, sleep) -> None:
+    """Dismiss an open keyboard before a tap/submit: it obscures buttons and its
+    IME action key (Next/Done/Go) would otherwise win the submit ranking."""
+    try:
+        if d.keyboard_visible():
+            d.press_back()
+            sleep(0.3)
+    except Exception:
+        pass
+
+
 def _resolve_submit(d, target, cache, sleep):
     """Find the submit control: an explicit target, else the first matching
     common submit label on the current screen."""
@@ -100,7 +111,7 @@ def execute(d: Device, step: dict[str, Any], *,
     encodes them in the returned ActionResult's status."""
     data = data or {}
     action = step.get("action")
-    target = step.get("target")
+    target = _norm_target(step.get("target"))
     value = _interpolate(step.get("value"), data)
     started = now_ms()
 
@@ -119,14 +130,20 @@ def execute(d: Device, step: dict[str, Any], *,
                 raise ValueError("launch requires a package")
             d.launch(package, launch_activity)
             detail = f"launched {package}"
-        elif action in TARGETED_ACTIONS:
-            if not target:
-                raise ValueError(f"action '{action}' requires a target")
-            role = "field" if action == "type" else "tappable"
-            res, recovery = reach(d, target, sleep=sleep, role=role, cache=cache)
+        elif action in TARGETED_ACTIONS or action == "submit":
+            if action in ("tap", "submit", "long_click"):
+                _hide_keyboard(d, sleep)
+            if action == "submit":
+                res, recovery = _resolve_submit(d, target, cache, sleep)
+            else:
+                if not target:
+                    raise ValueError(f"action '{action}' requires a target")
+                role = "field" if action in ("type", "enter_text") else "tappable"
+                res, recovery = reach(d, target, sleep=sleep, role=role, cache=cache)
             if res is None or not res.found:
                 after = observe(d, after_path)
-                reason, suggestions, summary = _diagnose(target, action, after)
+                reason, suggestions, summary = _diagnose(
+                    target or {"label": "submit"}, action, after)
                 return ActionResult(
                     status=Status.BLOCKED, action=action, target=target, value=value,
                     recovery=recovery, before=before, after=after,
@@ -137,7 +154,9 @@ def execute(d: Device, step: dict[str, Any], *,
                 )
             resolved_by = res.strategy
             resolved_conf = res.confidence
-            _perform(d, action, res, value)
+            perform_action = "type" if action == "enter_text" else (
+                "tap" if action == "submit" else action)
+            _perform(d, perform_action, res, value)
         elif action == "swipe":
             _swipe(d, step)
             detail = "swiped"

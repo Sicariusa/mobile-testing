@@ -124,7 +124,7 @@ def _run_assert(device: Device, assertion: dict[str, Any],
     action's before/after; every other assertion over the current screen."""
     started = now_ms()
     current = observe(device, after_path)
-    if assertion.get("type") == "screen_changed":
+    if assertion.get("type") in ("screen_changed", "activity_changed"):
         before, after = last_before, last_after
     else:
         before, after = current, current
