@@ -1,0 +1,19 @@
+# Run output / evidence (regenerated every run)
+reports/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+
+# APKs dropped in for local runs
+*.apk
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/

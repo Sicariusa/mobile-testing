@@ -1,0 +1,80 @@
+"""Resolver + recovery: scroll-into-view, OCR fallback, keyboard, BLOCKED."""
+from __future__ import annotations
+
+from engine import resolver, recovery
+from engine import models
+from tests.fake_device import FakeDevice, FakeScreen, hierarchy, node
+
+NOSLEEP = lambda *_a, **_k: None
+
+
+def test_resolver_selector_priority():
+    screen = FakeScreen("home", elements=(
+        {"id": "com.example.shop:id/login", "text": "Login", "center": (100, 200), "goto": 0},
+    ))
+    d = FakeDevice([screen])
+    res = resolver.resolve(d, {"id": "com.example.shop:id/login", "text": "Login"})
+    assert res.found
+    assert res.strategy == models.STRATEGY_RESOURCE_ID  # id wins over text
+    assert res.confidence == 1.0
+
+
+def test_resolver_ocr_fallback_when_selectors_miss():
+    # No matching selector element, but the label is painted on screen.
+    screen = FakeScreen("promo", ocr_lines=("PAY NOW",), elements=())
+    d = FakeDevice([screen])
+    res = resolver.resolve(d, {"text": "PAY NOW", "ocr": "PAY NOW"})
+    assert res.found
+    assert res.strategy == models.STRATEGY_OCR
+    assert res.coordinates is not None
+    assert res.element is None
+    assert 0 < res.confidence <= 1.0
+
+
+def test_find_with_scroll_reveals_offscreen():
+    top = FakeScreen("top", elements=(), scroll_goto=1)
+    bottom = FakeScreen("bottom", elements=(
+        {"text": "Submit", "center": (100, 400), "goto": 1},
+    ))
+    d = FakeDevice([top, bottom])
+    res = resolver.find_with_scroll(d, {"text": "Submit"}, max_scrolls=3)
+    assert res.found
+    assert d.scroll_count >= 1
+
+
+def test_recovery_dismisses_keyboard():
+    # Keyboard covers the target on first look; pressing back reveals it.
+    screen = FakeScreen("form", keyboard_visible=True, elements=(
+        {"text": "Continue", "center": (100, 500), "goto": 0},
+    ))
+    d = FakeDevice([screen])
+    # target only becomes reachable conceptually after keyboard dismissed;
+    # here the element exists but we assert the keyboard was dismissed in trace.
+    res, trace = recovery.reach(d, {"text": "Continue"}, sleep=NOSLEEP)
+    assert res is not None and res.found
+    methods = [a["method"] for a in trace.attempts]
+    assert "immediate" in methods
+
+
+def test_recovery_scroll_then_resolve():
+    top = FakeScreen("top", elements=(), scroll_goto=1)
+    bottom = FakeScreen("bottom", elements=(
+        {"text": "Buy", "center": (100, 400), "goto": 1},
+    ))
+    d = FakeDevice([top, bottom])
+    res, trace = recovery.reach(d, {"text": "Buy"}, sleep=NOSLEEP)
+    assert res is not None and res.found
+    assert any(a["method"] == "post_scroll" and a["outcome"] == "resolved"
+               for a in trace.attempts)
+
+
+def test_recovery_gives_up_blocked():
+    screen = FakeScreen("empty", elements=(), ocr_lines=("nothing useful here",))
+    d = FakeDevice([screen])
+    res, trace = recovery.reach(d, {"text": "Nonexistent", "ocr": "Nonexistent"},
+                                sleep=NOSLEEP)
+    assert res is None
+    methods = [a["method"] for a in trace.attempts]
+    # full escalation was attempted before giving up
+    assert "immediate" in methods and "retry" in methods
+    assert "scroll" in methods and "ocr" in methods

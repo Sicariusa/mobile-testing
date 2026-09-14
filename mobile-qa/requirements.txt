@@ -1,0 +1,11 @@
+# Mobile QA Test Runner — Python dependencies
+#
+# Device driver + transport
+uiautomator2>=3.0        # UI hierarchy, gestures, set_text, ATX agent over ADB
+# Imaging + OCR
+Pillow>=10.0             # screenshot loading, pixel-diff, thumbnails
+pytesseract>=0.3.10      # wraps the `tesseract` binary (must be installed separately)
+# Config
+pyyaml>=6.0              # test-case parsing
+# Tests
+pytest>=7.4             # unit suite (FakeDevice scenarios)

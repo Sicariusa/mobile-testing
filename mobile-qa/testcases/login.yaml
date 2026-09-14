@@ -1,0 +1,45 @@
+# Sample test case — login with valid credentials.
+#
+# Selectors (ids/text) and expected values are supplied by the test author.
+# Replace `package`, the resource-ids, and expected text with your app's real
+# values. `{{email}}` / `{{password}}` are interpolated from `data` below.
+name: "Login with valid credentials"
+package: com.example.shop
+launch_activity: null        # null => use the APK's launchable activity
+
+data:
+  email: test@example.com
+  password: Password123
+
+steps:
+  - action: launch
+
+  - action: tap
+    target: { text: "Login" }
+
+  - action: type
+    target: { id: "com.example.shop:id/email" }
+    value: "{{email}}"
+
+  - action: type
+    target: { id: "com.example.shop:id/password" }
+    value: "{{password}}"
+
+  - action: tap
+    target: { text: "Login" }
+
+  # Tries the hierarchy first, then OCR automatically — passes whether the text
+  # is in the accessibility tree or only painted on screen.
+  - assert:
+      type: text_exists
+      value: "Welcome"
+
+  # OCR only — for text the hierarchy never exposes (e.g. a rendered button).
+  - assert:
+      type: ocr_text_exists
+      value: "PAY NOW"
+
+  # Evidence that the last action produced a state transition (not semantic
+  # proof of success on its own).
+  - assert:
+      type: screen_changed
