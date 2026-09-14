@@ -29,11 +29,13 @@ def settle(d: Device, timeout: float = SETTLE_TIMEOUT_S,
     observed stability, False on timeout. ``sleep`` is injectable for tests.
     """
     deadline = time.monotonic() + timeout
+    _safe(d.invalidate)  # settle must read the live screen, never a memoized one
     prev_xml = _safe(d.dump_hierarchy)
     prev_act = _safe(d.current_activity)
 
     while time.monotonic() < deadline:
         sleep(interval)
+        _safe(d.invalidate)
         cur_xml = _safe(d.dump_hierarchy)
         cur_act = _safe(d.current_activity)
         stable = cur_xml == prev_xml and cur_act == prev_act

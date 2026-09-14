@@ -24,6 +24,7 @@ import subprocess
 from abc import ABC, abstractmethod
 from typing import Any, Optional
 
+from . import config
 from . import models
 
 # Selector kinds understood by Device.find (see resolver.py for priority order)
@@ -85,6 +86,10 @@ class Device(ABC):
     @abstractmethod
     def dump_hierarchy(self) -> str: ...
 
+    def invalidate(self) -> None:
+        """Drop any memoized screen read. Default no-op; the live adapter
+        overrides it. Called after every action so the next read is fresh."""
+
     @abstractmethod
     def current_activity(self) -> Optional[str]: ...
 
@@ -122,14 +127,21 @@ class Device(ABC):
 # Real Android implementation (uiautomator2 + adb)
 # ---------------------------------------------------------------------------
 class _U2Element(Element):
-    def __init__(self, sel: Any):
+    def __init__(self, sel: Any, owner: Optional["AndroidDevice"] = None):
         self._sel = sel
+        self._owner = owner
+
+    def _touched(self) -> None:
+        if self._owner is not None:
+            self._owner.invalidate()
 
     def click(self) -> None:
         self._sel.click()
+        self._touched()
 
     def set_text(self, value: str) -> None:
         self._sel.set_text(value)
+        self._touched()
 
     def center(self) -> tuple[int, int]:
         # Prefer u2's own center(); fall back to computing from bounds if the
@@ -155,6 +167,16 @@ class AndroidDevice(Device):
     def __init__(self, u2_device: Any, serial: Optional[str] = None):
         self._d = u2_device
         self.serial = serial
+        self._hier_cache: Optional[str] = None
+        self._act_cache: Optional[str] = None
+        self._cache_valid = False
+
+    def invalidate(self) -> None:
+        """Drop the memoized hierarchy/activity so the next read is live. Called
+        by every mutating action below."""
+        self._cache_valid = False
+        self._hier_cache = None
+        self._act_cache = None
 
     # -- adb plumbing ---------------------------------------------------------
     def _adb(self, *args: str, timeout: int = 60) -> str:
@@ -181,12 +203,14 @@ class AndroidDevice(Device):
         except DeviceError:
             pass
         self._d.app_start(package, activity, stop=True)
+        self.invalidate()
 
     def stop(self, package: str) -> None:
         self._d.app_stop(package)
 
     def clear_data(self, package: str) -> None:
         self._adb("shell", "pm", "clear", package)
+        self.invalidate()
 
     # -- perception -----------------------------------------------------------
     def screenshot(self, path: str) -> str:
@@ -196,13 +220,26 @@ class AndroidDevice(Device):
         return path
 
     def dump_hierarchy(self) -> str:
-        return self._d.dump_hierarchy()
+        """Memoized within one screen state — see config.HIERARCHY_CACHE. The
+        memo holds until the next mutating action calls ``invalidate()``."""
+        if config.HIERARCHY_CACHE and self._cache_valid and self._hier_cache is not None:
+            return self._hier_cache
+        xml = self._d.dump_hierarchy()
+        if config.HIERARCHY_CACHE:
+            self._hier_cache = xml
+            self._cache_valid = True
+        return xml
 
     def current_activity(self) -> Optional[str]:
+        if config.HIERARCHY_CACHE and self._cache_valid and self._act_cache is not None:
+            return self._act_cache
         try:
-            return self._d.app_current().get("activity")
+            act = self._d.app_current().get("activity")
         except Exception:
-            return None
+            act = None
+        if config.HIERARCHY_CACHE and act is not None:
+            self._act_cache = act
+        return act
 
     def current_package(self) -> Optional[str]:
         try:
@@ -236,13 +273,15 @@ class AndroidDevice(Device):
             sel = d(description=value)
         else:
             raise DeviceError(f"unknown selector kind: {kind}")
-        return _U2Element(sel) if sel.exists else None
+        return _U2Element(sel, owner=self) if sel.exists else None
 
     def tap_xy(self, x: int, y: int) -> None:
         self._d.click(x, y)
+        self.invalidate()
 
     def input_text(self, value: str) -> None:
         self._d.send_keys(value)
+        self.invalidate()
 
     def scroll_forward(self) -> None:
         try:
@@ -250,12 +289,15 @@ class AndroidDevice(Device):
         except Exception:
             w, h = self._d.window_size()
             self._d.swipe(w // 2, int(h * 0.7), w // 2, int(h * 0.3), 0.3)
+        self.invalidate()
 
     def press_back(self) -> None:
         self._d.press("back")
+        self.invalidate()
 
     def swipe(self, x1: int, y1: int, x2: int, y2: int, duration: float = 0.2) -> None:
         self._d.swipe(x1, y1, x2, y2, duration)
+        self.invalidate()
 
 
 # ---------------------------------------------------------------------------

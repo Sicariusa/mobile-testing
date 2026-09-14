@@ -33,6 +33,14 @@ SETTLE_POLL_INTERVAL_S: float = 0.3  # gap between the two hierarchy dumps we co
 SETTLE_REQUIRE_SCREEN_STABLE: bool = False
 SETTLE_SCREEN_EPSILON: float = 0.02
 
+# --- Performance -------------------------------------------------------------
+# Memoize the live hierarchy dump within one screen state: consumers that read
+# the screen back-to-back (resolve, recovery's no-progress check) reuse one dump
+# instead of each issuing a slow adb uiautomator dump. Any mutating action (tap,
+# type, scroll, back, launch) invalidates it. `settle` bypasses the memo because
+# it exists to detect change.
+HIERARCHY_CACHE: bool = True
+
 # --- Recovery bounds ---------------------------------------------------------
 RECOVERY_MAX_RETRIES: int = 3        # wait/retry attempts before escalating
 RECOVERY_RETRY_WAIT_S: float = 0.8   # wait between retries
