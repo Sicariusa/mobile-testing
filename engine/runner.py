@@ -27,6 +27,7 @@ from .loader import load_testcase, validate as validate_testcase
 from .models import ActionResult, Status, now_ms
 from .observation import observe
 from .selector_cache import SelectorCache
+from .screen_library import ScreenLibrary
 
 # statuses that abort the rest of the run
 FATAL_STATUSES = {Status.CRASH, Status.BLOCKED}
@@ -51,6 +52,7 @@ def run(testcase: Union[str, dict[str, Any]], device: Device, *,
 
     ev = Evidence(run_id, base_dir=base_dir)
     cache = SelectorCache(package)
+    library = ScreenLibrary(package)
 
     if apk_path:
         device.install(apk_path)
@@ -82,7 +84,7 @@ def run(testcase: Union[str, dict[str, Any]], device: Device, *,
                 device, step, data=data, package=package,
                 launch_activity=launch_activity,
                 before_path=before_path, after_path=after_path,
-                sleep=sleep, cache=cache, **settle_kwargs,
+                sleep=sleep, cache=cache, library=library, **settle_kwargs,
             )
             if res.before is not None:
                 last_before = res.before

@@ -52,17 +52,18 @@ def _hide_keyboard(d, sleep) -> None:
         pass
 
 
-def _resolve_submit(d, target, cache, sleep):
+def _resolve_submit(d, target, cache, sleep, library=None):
     """Find the submit control: an explicit target, else the first matching
     common submit label on the current screen."""
     if target:
-        return reach(d, target, sleep=sleep, role="tappable", cache=cache)
+        return reach(d, target, sleep=sleep, role="tappable", cache=cache, library=library)
     for label in SUBMIT_LABELS:
         r = resolver_mod.resolve(d, {"label": label}, allow_ocr=False,
                                  role="tappable", cache=cache)
         if r.found:
             return r, RecoveryTrace()
-    return reach(d, {"label": SUBMIT_LABELS[0]}, sleep=sleep, role="tappable", cache=cache)
+    return reach(d, {"label": SUBMIT_LABELS[0]}, sleep=sleep, role="tappable",
+                 cache=cache, library=library)
 
 
 def _diagnose(target: Optional[dict[str, Any]], action: str, after) -> tuple:
@@ -106,7 +107,8 @@ def execute(d: Device, step: dict[str, Any], *,
             after_path: Optional[str] = None,
             sleep=time.sleep,
             settle_fn=settle,
-            cache=None) -> ActionResult:
+            cache=None,
+            library=None) -> ActionResult:
     """Execute a single action step. Never raises for expected failures — it
     encodes them in the returned ActionResult's status."""
     data = data or {}
@@ -134,12 +136,13 @@ def execute(d: Device, step: dict[str, Any], *,
             if action in ("tap", "submit", "long_click"):
                 _hide_keyboard(d, sleep)
             if action == "submit":
-                res, recovery = _resolve_submit(d, target, cache, sleep)
+                res, recovery = _resolve_submit(d, target, cache, sleep, library)
             else:
                 if not target:
                     raise ValueError(f"action '{action}' requires a target")
                 role = "field" if action in ("type", "enter_text") else "tappable"
-                res, recovery = reach(d, target, sleep=sleep, role=role, cache=cache)
+                res, recovery = reach(d, target, sleep=sleep, role=role,
+                                      cache=cache, library=library)
             if res is None or not res.found:
                 after = observe(d, after_path)
                 reason, suggestions, summary = _diagnose(

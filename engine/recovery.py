@@ -41,12 +41,14 @@ def _tap(d: Device, res: ResolutionResult) -> None:
 
 def reach(d: Device, target: dict[str, Any],
           sleep=time.sleep, *, role: str = "tappable",
-          cache=None) -> tuple[Optional[ResolutionResult], RecoveryTrace]:
+          cache=None, library=None) -> tuple[Optional[ResolutionResult], RecoveryTrace]:
     """Try hard to resolve ``target``. Returns (ResolutionResult|None, trace).
 
     ``role``/``cache`` thread into the resolver so recovery re-perceives and
     re-resolves on the same shared model (selectors → cache → ranking → OCR).
-    ``sleep`` is injectable so tests run without real delays.
+    ``library`` (a ScreenLibrary) lets recovery know a target that isn't on the
+    current screen was captured elsewhere, so scrolling to reveal it is worth it
+    rather than a guess. ``sleep`` is injectable so tests run without real delays.
     """
     trace = RecoveryTrace()
 
@@ -64,6 +66,7 @@ def reach(d: Device, target: dict[str, Any],
     previous_screen = _screen_signature(d)
     for attempt in range(1, RECOVERY_MAX_RETRIES + 1):
         sleep(RECOVERY_RETRY_WAIT_S)
+        _safe(d.invalidate)  # the wait is for async change — re-read live, not memo
         res = _resolve(False)
         if res.found:
             trace.record("retry", "resolved", f"attempt {attempt} via {res.strategy}")
@@ -115,7 +118,13 @@ def reach(d: Device, target: dict[str, Any],
             return res, trace
         trace.record("post_dialog", "not_found")
 
-    # 4. scroll into view
+    # 4. scroll into view — if the library captured this target elsewhere, we
+    # know it exists and scrolling to reveal it is worth the passes (not a guess)
+    if library is not None:
+        bearing = _safe(lambda: library.find_bearing(_query_of(target), role))
+        if bearing:
+            trace.record("scroll", "bearing",
+                         f"target captured on '{bearing['label']}' near {bearing['center']}")
     previous_screen = _screen_signature(d)
     for i in range(1, RECOVERY_MAX_SCROLLS + 1):
         try:
@@ -143,6 +152,12 @@ def reach(d: Device, target: dict[str, Any],
     trace.record("ocr", "not_found")
 
     return None, trace
+
+
+def _query_of(target: dict[str, Any]) -> str:
+    """The human label of a target, for a library bearing lookup."""
+    return (target.get("label") or target.get("text") or target.get("desc")
+            or (target.get("id", "").rsplit("/", 1)[-1] if target.get("id") else ""))
 
 
 def _safe(fn):
