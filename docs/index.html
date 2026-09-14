@@ -56,6 +56,8 @@
   <a href="#evolution">★ Old engine → new engine</a>
   <a href="#phases">★ The six phases (+ code)</a>
   <a href="#fixes">★ Fixes &amp; code map</a>
+  <a href="#speed">★ Speed &amp; screen library</a>
+  <a href="#webapp">★ Web control panel</a>
   <div class="sub" style="margin:14px 0 2px">Using it</div>
   <a href="#req">2 · Requirements</a>
   <a href="#quick">3 · Quick start</a>
@@ -234,6 +236,49 @@ installs. Runs only when installed from Play (or from an unprotected dev build).
 <code>INSTALL_FAILED_NO_MATCHING_ABIS</code> on the x86_64 emulator (which translates
 <code>arm64-v8a</code>, not 32-bit arm). The 0.1.3 <code>arm64_v8a</code> split installs fine.</li>
 </ul></div>
+
+<h2 id="speed">★ Speed &amp; the screen library</h2>
+<p>Runs are fast because the live device <strong>memoizes the hierarchy</strong>
+within one screen state: reads that happen back-to-back (observe → resolve, and
+recovery's no-progress checks) reuse one adb dump instead of each issuing a slow
+one. Any action (<code>tap/type/scroll/back/launch</code>, or an element click)
+calls <code>invalidate()</code>; <code>settle</code> and the recovery wait-loops
+force a fresh read so change detection is unaffected.</p>
+<div class="card"><strong>Measured</strong> on <code>sauce_vague.yaml</code>
+(live emulator): device hierarchy dumps <span class="ok">23 → 6 (74% fewer)</span>,
+wall-clock <span class="ok">51 s → 29 s</span>. Toggle with
+<code>engine/config.py HIERARCHY_CACHE</code> (default on) —
+<code>engine/device.py</code> holds the memo.</div>
+
+<p>A <strong>pre-fetched screen library</strong> (<code>engine/screen_library.py</code>)
+lets you capture the screens you'll test by driving the app, so the engine has a
+map before a run — and can scroll <em>toward</em> an off-screen target (e.g. an
+add-to-cart button below the fold) instead of guessing.</p>
+<pre><code>py cli.py inspect --label catalog --into-library   # drive to a screen, capture it
+py cli.py screens --package com.example.app        # list the library
+py cli.py --preflight --test testcases\flow.yaml   # match a test's targets to captured screens (no device)</code></pre>
+<p>Each entry is keyed by the screen's <strong>structural fingerprint</strong>
+(text-independent), stored in <code>screens/&lt;pkg&gt;/library.json</code>.
+Preflight prints, per targeted step, <code class="ok">✓ found on '&lt;screen&gt;'</code>
+or <code class="bad">✗ not captured</code> — so you know before a live run.</p>
+<p class="muted">A non-PASS run also prints per-step diagnostics
+(<code>failure_reason</code>, the screen, and the nearest ranked matches) in the
+terminal — see <code>cli._print_diagnostics</code>.</p>
+
+<h2 id="webapp">★ Web control panel</h2>
+<p>A local page over the engine — no new dependencies (Python stdlib
+<code>http.server</code> + one static HTML file).</p>
+<pre><code>py cli.py web                 # → http://localhost:8765</code></pre>
+<table>
+<tr><th>Panel</th><th>Does</th><th>Needs a device?</th></tr>
+<tr><td>Environment</td><td>tool + device readiness (wraps <code>--check-env</code>)</td><td>no</td></tr>
+<tr><td>Screens</td><td>capture the current screen into the library; list it</td><td>capture: yes</td></tr>
+<tr><td>Test cases</td><td>list <code>testcases/*.yaml</code>; Run one</td><td>run: yes</td></tr>
+<tr><td>Reports</td><td>list past runs; open a <code>report.html</code> inline</td><td>no</td></tr>
+</table>
+<p class="muted"><code>webapp/server.py</code> exposes thin JSON endpoints over the
+same engine functions the CLI uses; report file serving is path-escape guarded.
+More options slot in behind the same seam without touching the engine.</p>
 
 <h2 id="req">2 · Requirements</h2>
 <table>
@@ -520,6 +565,8 @@ the resulting on-screen copy. Real biometric/CAPTCHA gates are out of scope by d
 <tr><td><code>cli.py</code></td><td>entrypoint + subcommands: <code>inspect · run · doctor · replay</code>, plus <code>--check-env</code>, <code>--dry-run</code></td></tr>
 <tr><td><code>engine/inspect.py</code></td><td><strong>new</strong> — perception: <code>Element</code>, <code>parse_elements</code>, fingerprints, <code>rank_candidates</code>, <code>screen_diff</code>, <code>format_table</code></td></tr>
 <tr><td><code>engine/selector_cache.py</code></td><td><strong>new</strong> — self-healing per-screen <code>label → selector</code> cache</td></tr>
+<tr><td><code>engine/screen_library.py</code></td><td><strong>new</strong> — pre-fetched per-app screen map (capture, fingerprint match, off-screen bearing)</td></tr>
+<tr><td><code>webapp/</code></td><td><strong>new</strong> — <code>server.py</code> (stdlib endpoints) + <code>index.html</code> control panel (<code>py cli.py web</code>)</td></tr>
 <tr><td><code>engine/</code> (rest)</td><td>device, observation, ocr, resolver, recovery, stabilize, validator, executor, runner, evidence, report, loader, models, config</td></tr>
 <tr><td><code>testcases/</code></td><td>YAML cases inc. <code>shop_login_semantic.yaml</code> (zero ids), <code>login.yaml</code>, <code>nextcloud_login.yaml</code>, <code>sauce.yaml</code></td></tr>
 <tr><td><code>examples/manual_flow.py</code></td><td>drive a flow by hand, probe selectors</td></tr>

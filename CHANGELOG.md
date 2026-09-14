@@ -3,6 +3,47 @@
 All notable changes to the mobile-testing engine are documented here.
 Format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [Unreleased] — Speed, screen library, web panel
+
+Follow-up round: make runs fast, add a pre-fetched screen library, and a local
+web control panel. Builds on the perception-first engine below.
+
+### Added
+
+- **Hierarchy memo** (`engine/device.py`, `engine/config.py`) — the live adapter
+  memoizes `dump_hierarchy()`/`current_activity()` within one screen state
+  (`config.HIERARCHY_CACHE`, default on). Every mutating action (tap/type/scroll/
+  back/launch, and element click/set_text via an owner ref) calls `invalidate()`;
+  `settle()` and recovery loops force-fresh so they still detect change. Measured
+  live on `sauce_vague.yaml`: **23 → 6 device dumps (74% fewer), 51s → 29s**.
+- **Screen library** (`engine/screen_library.py`, new) — `ScreenLibrary(package)`
+  persists to `screens/<pkg>/library.json`; the user captures the screens they'll
+  test by driving the app (`inspect --into-library`). `match(fingerprint)` finds
+  a captured screen; `find_bearing(query)` locates an off-screen target's captured
+  position so recovery scrolls *toward* it instead of blindly. Reuses the
+  `cmd_inspect` bundle shape and `rank_candidates`.
+- **CLI**: `inspect --into-library` (capture), `screens --package …` (list the
+  library), `--preflight --test …` (match a test's targets to captured screens,
+  no device), and `web [--port]` (launch the panel).
+- **Web control panel** (`webapp/server.py` + `webapp/index.html`, new) — stdlib
+  `http.server` exposing `env / testcases / screens / reports / inspect / run`;
+  a static dark-theme page to capture screens, run tests, and open reports
+  inline. Report file serving is path-escape guarded.
+- **Run diagnostics** (`cli.py`) — a non-PASS run now prints each blocked/failed
+  step's `failure_reason`, the screen it was on, and the nearest ranked on-screen
+  matches (was only in `timeline.json`).
+- **Clickable-ancestor promotion** (`engine/inspect.py`) — a tap target whose
+  matching label sits on a non-clickable node (e.g. a product title) now promotes
+  to its clickable card ancestor via `parent_index`, so `tap "Backpack"` resolves.
+- **Tests** (86 total): `test_screen_library`, `test_device_cache`, `test_webapp`.
+
+### Changed
+
+- `engine/resolver.py` / `engine/recovery.py` / `engine/executor.py` /
+  `engine/runner.py` thread the `ScreenLibrary` through; recovery records a
+  bearing when the library knows an off-screen target; resolver records
+  `role_rejected` candidates for clearer diagnostics.
+
 ## [Unreleased] — Perception-first engine (Phases 1–6)
 
 Reworked the runner from a fixed "resolve selector → tap" pipeline into a shared

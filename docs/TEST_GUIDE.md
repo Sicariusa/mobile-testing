@@ -420,6 +420,59 @@ Watch it fetch the real ids, bind the labels, and pass — then open
 
 ---
 
+## 9d. Speed, the screen library, preflight & the web panel
+
+**Faster runs (hierarchy memo).** Every step used to issue many
+`dump_hierarchy()` calls (each a slow adb uiautomator dump). The live device now
+memoizes the hierarchy within one screen state and invalidates it after any
+action (`config.HIERARCHY_CACHE`, default on); `settle` and recovery force-fresh
+reads so change detection is unaffected. Measured on `sauce_vague.yaml`:
+**23 → 6 device dumps (74% fewer), 51 s → 29 s.** Toggle off to compare:
+
+```powershell
+py -c "import engine.config as c; c.HIERARCHY_CACHE=False"   # (or edit config.py)
+```
+
+**Pre-fetch a screen library.** Capture the screens you'll test by driving the
+app, so the engine has a map before a run (and can scroll *toward* an off-screen
+target instead of guessing):
+
+```powershell
+adb shell monkey -p <package> -c android.intent.category.LAUNCHER 1
+py cli.py inspect --label catalog --into-library     # drive to each screen, capture
+py cli.py screens --package <package>                # list the library
+```
+
+Bundles land in `screens\<package>\` and the library index in
+`screens\<package>\library.json` (keyed by each screen's structural fingerprint).
+
+**Preflight — match a test to the library (no device).** Before a live run, see
+which targets are already known and which will be resolved live:
+
+```powershell
+py cli.py --preflight --test testcases\sauce_add_to_cart.yaml
+```
+
+Each targeted step prints `✓ found on '<screen>'` or `✗ not in any captured
+screen`; exit `0` when all are known.
+
+**Run diagnostics.** A non-PASS run now prints, per blocked/failed step, the
+`failure_reason`, the screen it was on, and the nearest ranked on-screen matches
+— the same data that is in `timeline.json`, surfaced in the terminal.
+
+**Web control panel.** A local page over the engine — env/device status, capture
+screens, run any test, open reports inline:
+
+```powershell
+py cli.py web                 # → http://localhost:8765  (Ctrl+C to stop)
+```
+
+Read-only panels work with no device; capture/run need one connected. It is a
+stdlib server (`webapp/server.py`) + a static page (`webapp/index.html`), so
+there are no new dependencies.
+
+---
+
 ## 10. Optional knobs (engine/config.py)
 
 | Setting | Default | Effect |
