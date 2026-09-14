@@ -16,11 +16,46 @@ import os
 import tempfile
 from typing import Any, Optional
 
+from . import inspect as inspect_mod
 from . import models
-from .config import OCR_MIN_CONFIDENCE, RESOLVER_MAX_SCROLLS
+from .config import (OCR_MIN_CONFIDENCE, RESOLVE_AMBIGUOUS_GAP, RESOLVE_MIN_SCORE,
+                     RESOLVER_MAX_SCROLLS)
 from .device import Device
 from .models import ResolutionResult
 from . import ocr as ocr_mod
+
+
+def _query_text(target: dict[str, Any]) -> str:
+    """The human label to rank/OCR by: explicit label/text/desc, else the id tail."""
+    if target.get("label"):
+        return str(target["label"]).strip()
+    if target.get("text"):
+        return str(target["text"]).strip()
+    if target.get("desc"):
+        return str(target["desc"]).strip()
+    if target.get("id"):
+        return str(target["id"]).rsplit("/", 1)[-1]
+    return ""
+
+
+def _concrete_selector(el) -> Optional[dict[str, Any]]:
+    """A cacheable, re-findable selector for a ranked element (id > text > desc)."""
+    if el.resource_id:
+        return {"strategy": models.STRATEGY_RESOURCE_ID, "value": el.resource_id}
+    if el.text.strip():
+        return {"strategy": models.STRATEGY_TEXT_EXACT, "value": el.text.strip()}
+    if el.content_desc.strip():
+        return {"strategy": models.STRATEGY_DESC, "value": el.content_desc.strip()}
+    return None
+
+
+def _screen(d: Device) -> tuple[str, list]:
+    """Current structural fingerprint + parsed elements (empty on any failure)."""
+    try:
+        els = inspect_mod.parse_elements(d.dump_hierarchy())
+        return inspect_mod.structural_fingerprint(d.current_activity(), els), els
+    except Exception:
+        return "", []
 
 
 def _selector_plan(target: dict[str, Any]) -> list[tuple[str, str]]:
@@ -44,14 +79,19 @@ def _ocr_query(target: dict[str, Any]) -> Optional[str]:
 
 def resolve(d: Device, target: dict[str, Any], *,
             allow_ocr: bool = True,
-            screenshot_path: Optional[str] = None) -> ResolutionResult:
+            screenshot_path: Optional[str] = None,
+            role: str = "tappable",
+            cache=None) -> ResolutionResult:
     """Locate ``target`` on the *current* screen (no scrolling, no waiting).
 
-    Selectors first; then, if ``allow_ocr`` and a query text is available, OCR
-    the screenshot and return coordinates. Records every attempt.
+    Order: explicit selectors (EXACT) → cache fast-path → inventory candidate
+    ranking (label→element, MATCHED/AMBIGUOUS) → OCR. ``role`` (``field`` |
+    ``tappable``) biases ranking; ``cache`` (a SelectorCache) learns and reuses
+    concrete bindings per screen. Records every attempt.
     """
     result = ResolutionResult()
 
+    # 1. explicit selectors — a direct hit is EXACT
     for kind, value in _selector_plan(target):
         try:
             element = d.find(kind, value)
@@ -62,25 +102,84 @@ def resolve(d: Device, target: dict[str, Any], *,
             result.element = element
             result.strategy = kind
             result.confidence = 1.0
+            result.status = models.RESOLVE_EXACT
             result.record(kind, "hit", value=value)
             return result
         result.record(kind, "miss", value=value)
 
+    query = _query_text(target)
+    fingerprint, elements = _screen(d) if (cache is not None or query) else ("", [])
+
+    # 2. cache fast-path (self-healing: a stale binding just falls through)
+    if cache is not None and query and fingerprint:
+        sel = cache.get(fingerprint, role, query)
+        if sel and sel.get("strategy"):
+            try:
+                el = d.find(sel["strategy"], sel["value"])
+            except Exception:
+                el = None
+            if el is not None:
+                result.element = el
+                result.strategy = sel["strategy"]
+                result.confidence = 1.0
+                result.status = models.RESOLVE_MATCHED
+                result.bound_selector = sel
+                result.record("cache", "hit", value=sel.get("value"))
+                return result
+            result.record("cache", "stale", value=sel.get("value"))
+
+    # 3. inventory candidate ranking (label → element)
+    if query and elements:
+        cands = inspect_mod.rank_candidates(query, elements, role=role)
+        result.candidates = [c.as_dict() for c in cands]
+        # accept on base text similarity — role bonuses only order candidates,
+        # they must not push a weak textual match over the threshold.
+        if cands and cands[0].base >= RESOLVE_MIN_SCORE:
+            top = cands[0]
+            ambiguous = (len(cands) > 1 and cands[1].base >= RESOLVE_MIN_SCORE
+                         and (top.base - cands[1].base) < RESOLVE_AMBIGUOUS_GAP)
+            sel = _concrete_selector(top.element)
+            bound = None
+            if sel:
+                try:
+                    bound = d.find(sel["strategy"], sel["value"])
+                except Exception:
+                    bound = None
+            if bound is not None:
+                result.element = bound
+            else:
+                result.coordinates = top.element.center()
+                sel = {"coordinates": list(top.element.center())}
+            result.strategy = models.STRATEGY_RANKED
+            result.confidence = top.score
+            result.status = (models.RESOLVE_AMBIGUOUS if ambiguous
+                             else models.RESOLVE_MATCHED)
+            result.reasons = top.reasons
+            result.bound_selector = sel
+            if cache is not None and fingerprint and sel.get("strategy"):
+                cache.put(fingerprint, role, query, sel)
+            result.record("ranked", "hit", value=query, confidence=round(top.score, 3))
+            return result
+
+    # 4. OCR fallback
     if allow_ocr:
-        query = _ocr_query(target)
-        if query:
-            match, shot = _ocr_locate(d, query, screenshot_path)
+        oq = _ocr_query(target)
+        if oq:
+            match, shot = _ocr_locate(d, oq, screenshot_path)
             if match and match["confidence"] >= OCR_MIN_CONFIDENCE:
                 cx, cy = match["bounds"]["center"]
                 result.coordinates = (cx, cy)
                 result.strategy = models.STRATEGY_OCR
                 result.confidence = match["confidence"]
-                result.record(models.STRATEGY_OCR, "hit", value=query,
+                result.status = models.RESOLVE_MATCHED
+                result.record(models.STRATEGY_OCR, "hit", value=oq,
                               confidence=round(match["confidence"], 4))
                 return result
-            result.record(models.STRATEGY_OCR, "miss", value=query,
+            result.record(models.STRATEGY_OCR, "miss", value=oq,
                           confidence=round(match["confidence"], 4) if match else 0.0)
 
+    if result.status is None:
+        result.status = models.RESOLVE_NOT_FOUND
     return result  # not found (result.found is False)
 
 

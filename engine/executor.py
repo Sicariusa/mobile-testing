@@ -21,12 +21,37 @@ from typing import Any, Optional
 
 from . import inspect as inspect_mod
 from . import models
+from . import resolver as resolver_mod
 from .device import Device
 from .models import ActionResult, FailureReason, RecoveryTrace, Status, now_ms
 from .observation import observe
 from .recovery import reach
 from .stabilize import settle
 from .validator import logcat_fatal
+
+# Labels a bare `submit` will try, in order, when no target is given.
+SUBMIT_LABELS = ("Submit", "Continue", "Next", "Sign in", "Log in", "Login",
+                 "Done", "Confirm")
+
+
+def _norm_target(target):
+    """A string target is an intent label → {'label': ...}; a mapping passes through."""
+    if isinstance(target, str):
+        return {"label": target}
+    return target
+
+
+def _resolve_submit(d, target, cache, sleep):
+    """Find the submit control: an explicit target, else the first matching
+    common submit label on the current screen."""
+    if target:
+        return reach(d, target, sleep=sleep, role="tappable", cache=cache)
+    for label in SUBMIT_LABELS:
+        r = resolver_mod.resolve(d, {"label": label}, allow_ocr=False,
+                                 role="tappable", cache=cache)
+        if r.found:
+            return r, RecoveryTrace()
+    return reach(d, {"label": SUBMIT_LABELS[0]}, sleep=sleep, role="tappable", cache=cache)
 
 
 def _diagnose(target: Optional[dict[str, Any]], action: str, after) -> tuple:
@@ -59,7 +84,7 @@ def _diagnose(target: Optional[dict[str, Any]], action: str, after) -> tuple:
     return reason, suggestions, summary
 
 # Actions that require a resolved target
-TARGETED_ACTIONS = {"tap", "type", "long_click"}
+TARGETED_ACTIONS = {"tap", "type", "long_click", "enter_text"}
 
 
 def execute(d: Device, step: dict[str, Any], *,
@@ -69,7 +94,8 @@ def execute(d: Device, step: dict[str, Any], *,
             before_path: Optional[str] = None,
             after_path: Optional[str] = None,
             sleep=time.sleep,
-            settle_fn=settle) -> ActionResult:
+            settle_fn=settle,
+            cache=None) -> ActionResult:
     """Execute a single action step. Never raises for expected failures — it
     encodes them in the returned ActionResult's status."""
     data = data or {}
@@ -96,7 +122,8 @@ def execute(d: Device, step: dict[str, Any], *,
         elif action in TARGETED_ACTIONS:
             if not target:
                 raise ValueError(f"action '{action}' requires a target")
-            res, recovery = reach(d, target, sleep=sleep)
+            role = "field" if action == "type" else "tappable"
+            res, recovery = reach(d, target, sleep=sleep, role=role, cache=cache)
             if res is None or not res.found:
                 after = observe(d, after_path)
                 reason, suggestions, summary = _diagnose(target, action, after)

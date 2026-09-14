@@ -28,15 +28,21 @@ from . import resolver as resolver_mod
 
 
 def reach(d: Device, target: dict[str, Any],
-          sleep=time.sleep) -> tuple[Optional[ResolutionResult], RecoveryTrace]:
+          sleep=time.sleep, *, role: str = "tappable",
+          cache=None) -> tuple[Optional[ResolutionResult], RecoveryTrace]:
     """Try hard to resolve ``target``. Returns (ResolutionResult|None, trace).
 
+    ``role``/``cache`` thread into the resolver so recovery re-perceives and
+    re-resolves on the same shared model (selectors → cache → ranking → OCR).
     ``sleep`` is injectable so tests run without real delays.
     """
     trace = RecoveryTrace()
 
-    # 1. immediate (selectors only — OCR is saved for the final stage)
-    res = resolver_mod.resolve(d, target, allow_ocr=False)
+    def _resolve(allow_ocr: bool):
+        return resolver_mod.resolve(d, target, allow_ocr=allow_ocr, role=role, cache=cache)
+
+    # 1. immediate (selectors/cache/ranking — OCR is saved for the final stage)
+    res = _resolve(False)
     if res.found:
         trace.record("immediate", "resolved", res.strategy or "")
         return res, trace
@@ -45,7 +51,7 @@ def reach(d: Device, target: dict[str, Any],
     # 2. wait / retry
     for attempt in range(1, RECOVERY_MAX_RETRIES + 1):
         sleep(RECOVERY_RETRY_WAIT_S)
-        res = resolver_mod.resolve(d, target, allow_ocr=False)
+        res = _resolve(False)
         if res.found:
             trace.record("retry", "resolved", f"attempt {attempt} via {res.strategy}")
             return res, trace
@@ -58,7 +64,7 @@ def reach(d: Device, target: dict[str, Any],
             trace.record("dismiss_keyboard", "pressed_back")
         except Exception as exc:
             trace.record("dismiss_keyboard", "error", str(exc))
-        res = resolver_mod.resolve(d, target, allow_ocr=False)
+        res = _resolve(False)
         if res.found:
             trace.record("post_keyboard", "resolved", res.strategy or "")
             return res, trace
@@ -72,14 +78,14 @@ def reach(d: Device, target: dict[str, Any],
         except Exception as exc:
             trace.record("scroll", "error", str(exc))
             break
-        res = resolver_mod.resolve(d, target, allow_ocr=False)
+        res = _resolve(False)
         if res.found:
             trace.record("post_scroll", "resolved", f"pass {i} via {res.strategy}")
             return res, trace
         trace.record("post_scroll", "not_found", f"pass {i}")
 
     # 5. OCR fallback (last resort)
-    res = resolver_mod.resolve(d, target, allow_ocr=True)
+    res = _resolve(True)
     if res.found:
         trace.record("ocr", "resolved", f"confidence {round(res.confidence, 3)}")
         return res, trace

@@ -222,8 +222,9 @@ def screen_diff(before, after) -> ScreenDiff:
 @dataclass
 class Candidate:
     element: Element
-    score: float
+    score: float                       # base + role bonuses (ordering)
     reasons: list[str] = field(default_factory=list)
+    base: float = 0.0                  # pure text/desc/id similarity (acceptance)
 
     def as_dict(self) -> dict[str, Any]:
         e = self.element
@@ -231,7 +232,7 @@ class Candidate:
             "label": e.label(), "kind": e.kind(),
             "resource_id": e.resource_id, "text": e.text,
             "content_desc": e.content_desc, "score": round(self.score, 3),
-            "reasons": self.reasons,
+            "base": round(self.base, 3), "reasons": self.reasons,
         }
 
 
@@ -269,7 +270,7 @@ def rank_candidates(query: str, elements: list[Element],
             score -= 0.2
             reasons.append("disabled -0.20")
         if score > 0:
-            cands.append(Candidate(e, score, reasons))
+            cands.append(Candidate(e, score, reasons, base=base))
     cands.sort(key=lambda c: c.score, reverse=True)
     return cands[:limit]
 

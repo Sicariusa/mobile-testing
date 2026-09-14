@@ -39,6 +39,13 @@ STRATEGY_TEXT_EXACT = "text_exact"
 STRATEGY_TEXT_CONTAINS = "text_contains"
 STRATEGY_DESC = "desc"
 STRATEGY_OCR = "ocr"
+STRATEGY_RANKED = "ranked"        # bound via inventory candidate ranking
+
+# Resolution status (how confident the locator is about the match)
+RESOLVE_EXACT = "EXACT"            # a selector hit directly
+RESOLVE_MATCHED = "MATCHED"        # ranked/cache match above threshold
+RESOLVE_AMBIGUOUS = "AMBIGUOUS"    # top candidate too close to the next
+RESOLVE_NOT_FOUND = "NOT_FOUND"
 
 VALIDATED_HIERARCHY = "hierarchy"
 VALIDATED_OCR = "ocr"
@@ -135,9 +142,13 @@ class ResolutionResult:
 
     element: Any = None                       # opaque device handle, or None
     coordinates: Optional[tuple[int, int]] = None
-    strategy: Optional[str] = None            # resource_id | text_* | desc | ocr
+    strategy: Optional[str] = None            # resource_id | text_* | desc | ocr | ranked
     confidence: float = 0.0
     attempts: list[dict[str, Any]] = field(default_factory=list)
+    status: Optional[str] = None              # EXACT | MATCHED | AMBIGUOUS | NOT_FOUND
+    candidates: list[dict[str, Any]] = field(default_factory=list)
+    reasons: list[str] = field(default_factory=list)
+    bound_selector: Optional[dict[str, Any]] = None   # concrete selector cached
 
     @property
     def found(self) -> bool:
@@ -151,10 +162,13 @@ class ResolutionResult:
     def as_dict(self) -> dict[str, Any]:
         return {
             "found": self.found,
+            "status": self.status,
             "strategy": self.strategy,
             "confidence": round(self.confidence, 4),
             "coordinates": list(self.coordinates) if self.coordinates else None,
             "resolved_via_element": self.element is not None,
+            "candidates": self.candidates,
+            "reasons": self.reasons,
             "attempts": self.attempts,
         }
 

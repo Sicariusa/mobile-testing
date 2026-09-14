@@ -65,6 +65,13 @@ class Evidence:
         with open(os.path.join(self.run_dir, "logcat.txt"), "w", encoding="utf-8") as fh:
             fh.write(text or "")
 
+    def write_bindings(self, bindings: dict[str, Any]) -> str:
+        """The label→selector map the resolver learned this run (viewable)."""
+        path = os.path.join(self.run_dir, "bindings.json")
+        with open(path, "w", encoding="utf-8") as fh:
+            json.dump(bindings, fh, indent=2, ensure_ascii=False)
+        return path
+
     def write_timeline(self, meta: dict[str, Any]) -> str:
         payload = {"meta": meta, "steps": self.timeline}
         path = os.path.join(self.run_dir, "timeline.json")

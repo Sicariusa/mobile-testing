@@ -40,6 +40,9 @@ RECOVERY_MAX_SCROLLS: int = 3        # scroll-into-view attempts
 
 # --- Resolver ----------------------------------------------------------------
 RESOLVER_MAX_SCROLLS: int = 3        # find_with_scroll bound
+# Inventory candidate ranking (label → element auto-binding, engine/resolver.py):
+RESOLVE_MIN_SCORE: float = 0.60      # min candidate score to accept a ranked match
+RESOLVE_AMBIGUOUS_GAP: float = 0.10  # top two within this margin => AMBIGUOUS
 
 # --- Evidence / report -------------------------------------------------------
 THUMBNAIL_MAX_WIDTH: int = 320       # px width of before/after thumbnails in the report

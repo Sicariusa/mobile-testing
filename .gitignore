@@ -23,6 +23,9 @@ manual-demo/
 # Inspected screen bundles (engine --inspect output)
 screens/
 
+# Learned selector bindings (per-app, regenerated on each run)
+.selector-cache/
+
 # OS / editor
 .DS_Store
 .idea/
