@@ -390,6 +390,36 @@ py cli.py doctor                    # environment check
 
 ---
 
+## 9c. The six phases — what each added and how to exercise it
+
+The perception-first rework landed in six phases. Each is independently
+testable; the unit suite (`py -m pytest -q`) covers all of them.
+
+| # | Phase | What it added | Exercise it |
+|---|-------|---------------|-------------|
+| 1 | **Perception** | one `ScreenObservation` per screen (elements, structural/content fingerprints, window flags) + `inspect` debug mode | `py cli.py inspect --label home` → read `screens\home\inventory.md`; `py -m pytest -q tests\test_inspect.py` |
+| 2 | **Resolution + auto-bind** | candidate ranking (label→id), self-healing per-screen cache | run any semantic test → check `reports\<run>\bindings.json` and `.selector-cache\<pkg>.json`; `tests\test_locator.py` |
+| 3 | **Semantic actions** | string/label targets, `enter_text`, `submit`, keyboard auto-dismiss | `py cli.py --test testcases\shop_login_semantic.yaml` (zero ids); `tests\test_semantic.py` |
+| 4 | **Validation** | `not_visible`, `activity_changed` over before/after | `tests\test_validation_extra.py` |
+| 5 | **Recovery** | detect a blocking dialog/permission → dismiss → re-resolve | `tests\test_recovery_dialog.py`; live: launch an app with a first-run permission prompt |
+| 6 | **CLI** | `inspect` · `replay` · `doctor` subcommands, richer failure output | `py cli.py inspect`, `py cli.py replay`, `py cli.py doctor`; `tests\test_cli_replay.py` |
+
+Full engine-evolution write-up (old vs new, every fix + the file/line it lives
+in) is in **[index.html](index.html)** → *Old engine → new engine*, *The six
+phases*, and *Fixes & code map*. A dated summary of every change is in
+[CHANGELOG.md](../CHANGELOG.md).
+
+**Minimal end-to-end proof (no ids, live):**
+
+```powershell
+py cli.py --apk apks\<app>.apk --test testcases\shop_login_semantic.yaml
+```
+
+Watch it fetch the real ids, bind the labels, and pass — then open
+`reports\<run_id>\bindings.json` to see the learned `label → resource-id` map.
+
+---
+
 ## 10. Optional knobs (engine/config.py)
 
 | Setting | Default | Effect |

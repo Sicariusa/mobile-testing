@@ -52,6 +52,11 @@
   <h1>Mobile QA Test Runner</h1>
   <div class="sub">Android UI test engine · guide</div>
   <a href="#what">1 · What it is</a>
+  <div class="sub" style="margin:14px 0 2px">Engine internals</div>
+  <a href="#evolution">★ Old engine → new engine</a>
+  <a href="#phases">★ The six phases (+ code)</a>
+  <a href="#fixes">★ Fixes &amp; code map</a>
+  <div class="sub" style="margin:14px 0 2px">Using it</div>
   <a href="#req">2 · Requirements</a>
   <a href="#quick">3 · Quick start</a>
   <a href="#how">4 · How the flow works</a>
@@ -80,8 +85,8 @@ It writes per-step evidence (before/after screenshots, hierarchy XML, OCR matche
    cli.py ──▶ check env ──▶ connect device ──▶ install APK
         │
         ▼   for each step:
-        ├─ observe(before)          package · activity · hierarchy · screenshot · keyboard
-        ├─ act                      resolve target: id → text → desc → OCR,  then tap/type/swipe
+        ├─ observe(before)          one ScreenObservation: elements · fingerprint · window
+        ├─ act                      resolve: id(EXACT) → cache → label-rank → OCR,  then tap/type/submit
         ├─ settle                   wait until the screen is stable
         ├─ observe(after)
         └─ validate                 hierarchy → OCR → change   (per assertion, fixed order)
@@ -92,6 +97,143 @@ It writes per-step evidence (before/after screenshots, hierarchy XML, OCR matche
 <div class="note">The engine touches Android <strong>only</strong> through <code>engine/device.py</code>.
 That single seam is why the whole engine is unit-tested against a fake device with no hardware, and
 why the same code runs unchanged on a real device.</div>
+
+<h2 id="evolution">★ Old engine → new engine</h2>
+<p>The runner started as a <strong>fixed pipeline</strong>: a step named an exact
+<code>resource-id</code>, the resolver looked it up, tapped it, done. It worked, but every
+test was welded to one app version — rename an id and the test broke, and writing a test
+meant hand-dumping the hierarchy to copy ids first.</p>
+<p>The rework turns that pipeline into a shared <strong>Perception → Resolution → Action →
+Observation → Validation</strong> loop. One <code>ScreenObservation</code> is built per
+screen and reused by execution, recovery, validation <em>and</em> the new inspect mode. You
+now write <strong>intent</strong> (the visible label); the engine perceives the live screen,
+ranks it, binds the real id, and remembers it.</p>
+
+<table>
+<tr><th></th><th>Old engine</th><th>New engine</th></tr>
+<tr><td><strong>You write</strong></td><td><code>target: { id: "com.app:id/login" }</code></td><td><code>target: "Login"</code> — a label</td></tr>
+<tr><td><strong>Resolution</strong></td><td>id → text → desc → OCR (selectors only)</td><td>selectors(EXACT) → <em>cache</em> → <em>ranking</em> → OCR</td></tr>
+<tr><td><strong>Finds ids</strong></td><td>you dump the tree by hand</td><td><code>inspect</code> fetches them; run-time auto-binds</td></tr>
+<tr><td><strong>Version drift</strong></td><td>id renamed → test breaks</td><td>cache self-heals; ranking re-binds by label</td></tr>
+<tr><td><strong>Failure</strong></td><td>bare <code>BLOCKED</code></td><td><code>failure_reason</code> + ranked on-screen suggestions</td></tr>
+<tr><td><strong>Popups</strong></td><td>break the flow</td><td>recovery auto-dismisses dialogs, re-resolves</td></tr>
+<tr><td><strong>Screen model</strong></td><td>ad-hoc dumps per concern</td><td>one shared <code>Observation</code> (elements, fingerprints, window)</td></tr>
+</table>
+
+<div class="flow">NEW LOOP  (engine/executor.py:execute)
+  PERCEIVE   observe(before)  ─▶ ScreenObservation   elements · fingerprint · window
+  RESOLVE    resolver.resolve:  id(EXACT) ─▶ cache(learned) ─▶ rank(label) ─▶ OCR
+  RECOVER    recovery.reach:    scroll · hide-keyboard · dismiss-dialog · re-resolve
+  ACT        tap / type / submit          (keyboard auto-hidden first)
+  OBSERVE    settle ─▶ observe(after)
+  VALIDATE   text_exists · not_visible · screen_changed · activity_changed
+  RECORD     png · xml · json   + learned label→id ─▶ reports/&lt;run&gt;/bindings.json
+                                                   + .selector-cache/&lt;pkg&gt;.json</div>
+
+<div class="note"><strong>Nothing about the device seam changed.</strong> The engine still
+talks to Android only through <code>engine/device.py</code>, so the whole new loop is still
+unit-tested against a fake device — <code>py -m pytest -q</code>.</div>
+
+<h2 id="phases">★ The six phases (with code locations)</h2>
+<p>Every phase is a commit-sized slice with its own tests. File/line refs are where to read
+or validate the implementation.</p>
+
+<div class="card"><h3 style="margin-top:0">Phase 1 — Perception</h3>
+<p>A tolerant screen model: one <code>Element</code> per node (id, text, desc, class, flags,
+bounds), plus fingerprints and dialog detection. This is what <code>inspect</code> prints and
+what every later phase consumes.</p>
+<table>
+<tr><th>Symbol</th><th>Where</th><th>Role</th></tr>
+<tr><td><code>Element</code>, <code>.label/.kind/.center</code></td><td><code>engine/inspect.py:36</code></td><td>one UI node, normalized</td></tr>
+<tr><td><code>parse_elements()</code></td><td><code>engine/inspect.py:92</code></td><td>hierarchy XML → elements (<code>[]</code> on malformed)</td></tr>
+<tr><td><code>structural_fingerprint()</code></td><td><code>engine/inspect.py:142</code></td><td>screen identity (ids+classes, text-independent)</td></tr>
+<tr><td><code>window_flags()</code> · <code>screen_diff()</code></td><td><code>engine/inspect.py:156</code> · <code>:191</code></td><td>dialog detection · before/after diff</td></tr>
+<tr><td><code>Observation.elements/window()</code></td><td><code>engine/models.py:94</code>–<code>111</code></td><td>lazy accessors on the shared observation</td></tr>
+</table>
+<p class="muted">Validate: <code>py cli.py inspect --label home</code> · <code>tests\test_inspect.py</code></p></div>
+
+<div class="card"><h3 style="margin-top:0">Phase 2 — Resolution + auto-bind + cache</h3>
+<p>The resolver gains candidate <em>ranking</em> (score a label against every live element) and
+a self-healing per-screen <em>cache</em>. A label becomes a concrete selector, which is cached
+under the screen fingerprint and reused next run; a stale binding just falls through to
+re-ranking.</p>
+<table>
+<tr><th>Symbol</th><th>Where</th><th>Role</th></tr>
+<tr><td><code>rank_candidates()</code></td><td><code>engine/inspect.py:250</code></td><td>similarity + role bonuses → ordered <code>Candidate</code>s</td></tr>
+<tr><td><code>resolve()</code> new order</td><td><code>engine/resolver.py:91</code></td><td>EXACT → cache(<code>:124</code>) → rank(<code>:142</code>) → OCR</td></tr>
+<tr><td><code>_concrete_selector()</code></td><td><code>engine/resolver.py:52</code></td><td>ranked element → cacheable id/text/desc</td></tr>
+<tr><td><code>SelectorCache</code></td><td><code>engine/selector_cache.py:20</code></td><td>key <code>fingerprint|role|query</code>, persists to JSON</td></tr>
+<tr><td><code>write_bindings()</code></td><td><code>engine/evidence.py:68</code></td><td>learned map → <code>reports/&lt;run&gt;/bindings.json</code></td></tr>
+</table>
+<p class="muted">Validate: any run → <code>reports\&lt;run&gt;\bindings.json</code> · <code>tests\test_locator.py</code></p></div>
+
+<div class="card"><h3 style="margin-top:0">Phase 3 — Semantic actions</h3>
+<p>Targets can be plain strings; two intent actions join the set. A tap/submit hides the
+keyboard first so its IME key can't win the ranking and the button isn't covered.</p>
+<table>
+<tr><th>Symbol</th><th>Where</th><th>Role</th></tr>
+<tr><td><code>_norm_target()</code></td><td><code>engine/executor.py:37</code></td><td><code>"Login"</code> → <code>{label:"Login"}</code></td></tr>
+<tr><td><code>enter_text</code> / <code>submit</code></td><td><code>engine/executor.py:133</code></td><td>type-by-label · find-and-tap a submit control</td></tr>
+<tr><td><code>_resolve_submit()</code></td><td><code>engine/executor.py:55</code></td><td>explicit target, else common submit labels</td></tr>
+<tr><td><code>_hide_keyboard()</code></td><td><code>engine/executor.py:44</code></td><td>dismiss IME before tap/submit</td></tr>
+<tr><td>loader vocabulary</td><td><code>engine/loader.py:16</code>–<code>18</code></td><td><code>enter_text</code>/<code>submit</code> accepted; string targets</td></tr>
+</table>
+<p class="muted">Validate: <code>py cli.py --test testcases\shop_login_semantic.yaml</code> (zero ids) · <code>tests\test_semantic.py</code></p></div>
+
+<div class="card"><h3 style="margin-top:0">Phase 4 — Validation</h3>
+<p>Two asserts reasoning over the preceding action's before/after observation.</p>
+<table>
+<tr><th>Symbol</th><th>Where</th><th>Role</th></tr>
+<tr><td><code>not_visible</code></td><td><code>engine/validator.py:114</code></td><td>inverse of <code>text_exists</code> (e.g. a spinner gone)</td></tr>
+<tr><td><code>activity_changed</code></td><td><code>engine/validator.py:126</code></td><td>the activity differs before→after</td></tr>
+</table>
+<p class="muted">Validate: <code>tests\test_validation_extra.py</code></p></div>
+
+<div class="card"><h3 style="margin-top:0">Phase 5 — Recovery</h3>
+<p>Before giving up on a target, recovery detects a blocking dialog/permission overlay on the
+shared perception, taps a known dismiss label, and re-resolves.</p>
+<table>
+<tr><th>Symbol</th><th>Where</th><th>Role</th></tr>
+<tr><td><code>reach()</code> (role/cache-aware)</td><td><code>engine/recovery.py:42</code></td><td>scroll → keyboard → dialog → OCR, threaded to resolve</td></tr>
+<tr><td>dialog stage + <code>_DISMISS_LABELS</code></td><td><code>engine/recovery.py:85</code> · <code>:31</code></td><td>Allow / While using the app / OK → re-resolve</td></tr>
+</table>
+<p class="muted">Validate: <code>tests\test_recovery_dialog.py</code>; live — launch an app with a first-run permission prompt.</p></div>
+
+<div class="card"><h3 style="margin-top:0">Phase 6 — CLI &amp; diagnostics</h3>
+<p>Debug and reporting commands, plus a richer failure payload (reason + ranked suggestions +
+screen summary) instead of a bare status.</p>
+<table>
+<tr><th>Symbol</th><th>Where</th><th>Role</th></tr>
+<tr><td><code>inspect</code> command</td><td><code>cli.py:90</code></td><td>scan any live screen → <code>screens\&lt;label&gt;\</code> bundle</td></tr>
+<tr><td><code>replay</code> command</td><td><code>cli.py:145</code></td><td>re-print a run's verdicts from <code>timeline.json</code>, no device</td></tr>
+<tr><td>subcommand dispatch</td><td><code>cli.py:218</code></td><td><code>inspect · run · doctor · replay</code></td></tr>
+<tr><td><code>_diagnose()</code></td><td><code>engine/executor.py:68</code></td><td>failed resolve → <code>FailureReason</code> + suggestions</td></tr>
+<tr><td><code>FailureReason</code></td><td><code>engine/models.py:55</code></td><td>TARGET_NOT_FOUND · UNEXPECTED_SCREEN · APP_CRASHED · …</td></tr>
+</table>
+<p class="muted">Validate: <code>py cli.py inspect</code> · <code>py cli.py replay</code> · <code>tests\test_cli_replay.py</code></p></div>
+
+<h2 id="fixes">★ Fixes &amp; code map</h2>
+<p>Real defects found while building and live-validating the new engine, each with the exact
+fix site so you can re-check it.</p>
+<table>
+<tr><th>Symptom</th><th>Cause</th><th>Fix</th><th>Where</th></tr>
+<tr><td>Inspector crashes on a real app (Nextcloud)</td><td>screen text held <code>U+202F</code>; Windows <code>cp1252</code> console can't encode it</td><td>force UTF-8 on stdout/stderr</td><td><code>cli.py:20</code>–<code>24</code></td></tr>
+<tr><td>Wrong element tapped for <code>submit</code></td><td>a non-clickable “Sign in” <em>heading</em> out-scored the real button</td><td>role gate: field→editable, tappable→clickable</td><td><code>engine/resolver.py:41</code> (<code>_role_ok</code>), gate at <code>:149</code></td></tr>
+<tr><td>Weak match still accepted</td><td>role/clickable bonus pushed a poor text match over threshold</td><td>separate <code>base</code> (accept) from <code>score</code> (order)</td><td><code>engine/inspect.py:223</code> (<code>Candidate</code>), <code>:250</code></td></tr>
+<tr><td>Semantic login fails; button unreachable</td><td>keyboard covered the button; its IME “Go” key matched <code>submit</code></td><td>auto-dismiss keyboard before tap/submit</td><td><code>engine/executor.py:44</code>, called <code>:135</code></td></tr>
+<tr><td>Logcat read throws <code>UnicodeDecodeError</code></td><td><code>cp1252</code> decode of adb output</td><td>decode <code>utf-8, errors="replace"</code></td><td><code>engine/device.py</code> (subprocess reads)</td></tr>
+<tr><td>Stale cached id keeps failing</td><td>a cached binding can go stale across app versions</td><td>self-heal: a stale hit falls through to re-ranking</td><td><code>engine/resolver.py:124</code>–<code>140</code></td></tr>
+</table>
+
+<div class="note"><strong>Live findings (device/app limits, not engine bugs), kept for the record:</strong>
+<ul style="margin:6px 0 0">
+<li><strong>Aimring</strong> launches then shows “Google Play not enabled” — it's wrapped by
+<code>com.pairip.licensecheck</code> (Play's app-integrity DRM), which blocks sideloaded
+installs. Runs only when installed from Play (or from an unprotected dev build).</li>
+<li><strong>Aimring 0.1.2 xapk</strong> ships <code>armeabi_v7a</code> only →
+<code>INSTALL_FAILED_NO_MATCHING_ABIS</code> on the x86_64 emulator (which translates
+<code>arm64-v8a</code>, not 32-bit arm). The 0.1.3 <code>arm64_v8a</code> split installs fine.</li>
+</ul></div>
 
 <h2 id="req">2 · Requirements</h2>
 <table>
@@ -129,7 +271,7 @@ py cli.py --apk sample-app\build\shop-login.apk --test testcases\login.yaml</cod
 <span class="tag t-ass">assert</span> (check the result). For an action the runner:</p>
 <ol>
 <li><strong>observe(before)</strong> — snapshot the screen.</li>
-<li><strong>resolve</strong> the target with recovery: try selectors <code>id → text(exact→contains) → desc</code>; if none hit, wait/retry, dismiss the keyboard, scroll, and finally OCR the label off the screenshot. If still nothing → <code class="bad">BLOCKED</code>.</li>
+<li><strong>resolve</strong> the target with recovery: <code>id/text/desc (EXACT) → cache (learned binding) → label ranking → OCR</code>; if none hit, wait/retry, dismiss the keyboard, scroll, dismiss a blocking dialog, and re-resolve. If still nothing → <code class="bad">BLOCKED</code> with a <code>failure_reason</code> + ranked suggestions.</li>
 <li><strong>perform</strong> the action (tap the element or the OCR coordinates; type; swipe).</li>
 <li><strong>settle</strong> — wait until two hierarchy dumps match (optionally until frames are pixel-idle).</li>
 <li><strong>observe(after)</strong>, then a <strong>crash gate</strong>: a FATAL line in logcat → <code class="bad">CRASH</code>.</li>
@@ -173,6 +315,8 @@ steps:                                  # required — a non-empty list
 <tr><td><span class="tag t-act">launch</span></td><td>—</td><td>start the app (fresh, plants a logcat baseline)</td></tr>
 <tr><td><span class="tag t-act">tap</span></td><td><code>target</code></td><td>click the resolved element / OCR coordinate</td></tr>
 <tr><td><span class="tag t-act">type</span></td><td><code>target</code>, <code>value</code></td><td>set text into the field</td></tr>
+<tr><td><span class="tag t-act">enter_text</span></td><td><code>target</code>, <code>value</code></td><td>type by <em>label</em> (field found by ranking); role = field</td></tr>
+<tr><td><span class="tag t-act">submit</span></td><td>— (or <code>target</code>)</td><td>find + tap a submit control (Login/Continue/Next…); hides keyboard first</td></tr>
 <tr><td><span class="tag t-act">long_click</span></td><td><code>target</code></td><td>long-press</td></tr>
 <tr><td><span class="tag t-act">swipe</span></td><td><code>from</code>,<code>to</code> (or none)</td><td>swipe between coords; with no coords it scrolls forward</td></tr>
 <tr><td><span class="tag t-act">back</span></td><td>—</td><td>press system Back</td></tr>
@@ -180,23 +324,31 @@ steps:                                  # required — a non-empty list
 </table>
 
 <h3>Targets (selectors) — how an element is found</h3>
-<p>A <code>target</code> is a mapping. The resolver tries the keys you provide in priority order:</p>
+<p>A <code>target</code> is either a <strong>string label</strong> (the new, preferred way) or a
+<strong>mapping</strong> of explicit keys. A string is treated as <code>{ label: … }</code>: the
+engine ranks it against the live screen, binds the real element, and caches it.</p>
 <table>
 <tr><th>key</th><th>matches</th><th>example</th></tr>
-<tr><td><code>id</code></td><td>resource-id (exact)</td><td><code>{ id: "com.app:id/email" }</code></td></tr>
+<tr><td><code>(string)</code></td><td><strong>label</strong> — ranked against text/desc/id of every live element</td><td><code>target: "Email"</code></td></tr>
+<tr><td><code>label</code></td><td>same as a bare string, in mapping form</td><td><code>{ label: "Email" }</code></td></tr>
+<tr><td><code>id</code></td><td>resource-id (exact) → <em>EXACT</em></td><td><code>{ id: "com.app:id/email" }</code></td></tr>
 <tr><td><code>text</code></td><td>visible text — exact, then “contains”</td><td><code>{ text: "Login" }</code></td></tr>
 <tr><td><code>desc</code></td><td>content-description (accessibility label)</td><td><code>{ desc: "Submit" }</code></td></tr>
 <tr><td><code>ocr</code></td><td>force an OCR search for this text (else falls back to <code>text</code>)</td><td><code>{ ocr: "PAY NOW" }</code></td></tr>
 </table>
-<p class="muted">You can combine them: <code>{ id: "...:id/next", text: "Next" }</code> — id is tried first,
-then text, then OCR as a last resort.</p>
+<p class="muted">Resolution order is <code>id/text/desc (EXACT) → cache (learned) → label ranking →
+OCR</code>. Explicit keys still win when you want a hard pin; a label is what makes a test
+survive id churn. The learned <code>label → id</code> map is written to
+<code>reports/&lt;run&gt;/bindings.json</code>.</p>
 
 <h3>Asserts</h3>
-<pre><code>- assert: { type: text_exists,     value: "Welcome" }      # hierarchy → OCR
-- assert: { type: ocr_text_exists, value: "PAY NOW" }      # OCR only (painted text)
-- assert: { type: element_exists,  id: "com.app:id/otp" }  # or text:/desc:
-- assert: { type: activity_is,     value: ".NafathActivity" }
-- assert: { type: screen_changed }                          # a state transition happened</code></pre>
+<pre><code>- assert: { type: text_exists,      value: "Welcome" }      # hierarchy → OCR
+- assert: { type: not_visible,      value: "Loading" }      # NEW — text is gone
+- assert: { type: ocr_text_exists,  value: "PAY NOW" }      # OCR only (painted text)
+- assert: { type: element_exists,   id: "com.app:id/otp" }  # or text:/desc:
+- assert: { type: activity_is,      value: ".NafathActivity" }
+- assert: { type: activity_changed }                         # NEW — activity differs before→after
+- assert: { type: screen_changed }                           # a state transition happened</code></pre>
 
 <h3>Data interpolation</h3>
 <p><code>{{key}}</code> in a step's <code>value</code> is replaced from <code>data</code>. Use it to keep
@@ -333,7 +485,16 @@ which screen you land on, and every visible string/control in both languages.</d
 one with <code>py cli.py --apk … --test testcases\&lt;file&gt;.yaml</code>.</p>
 
 <h2 id="selectors">10 · Finding an app's real selectors</h2>
-<p>For your own APK you need the real <code>resource-id</code>s and text. Launch the screen, then dump it:</p>
+<p><strong>Easiest — inspect mode (no test file).</strong> Launch the screen, then let the
+engine fetch everything into a bundle you can read:</p>
+<pre><code>adb shell monkey -p &lt;package&gt; -c android.intent.category.LAUNCHER 1
+py cli.py inspect --label home        # → screens\home\{inventory.md, hierarchy.xml, screenshot.png, observation.json}</code></pre>
+<p><code>screens\home\inventory.md</code> is a table of every element — kind, real
+<code>resource-id</code>, text, flags, bounds — plus the screen's structural fingerprint.
+Re-run per screen (<code>--label login</code>, <code>--label cart</code>) to map a multi-screen
+story. Often you won't need ids at all: use the visible label as the target and let ranking
+bind it.</p>
+<p class="muted">Raw alternatives (same data, lower level):</p>
 <pre><code>adb -s emulator-5554 shell am start -n &lt;package&gt;/&lt;activity&gt;
 adb -s emulator-5554 exec-out uiautomator dump /dev/tty      # prints the hierarchy XML</code></pre>
 <p>Or interactively in Python (same layer the runner uses):</p>
@@ -356,14 +517,18 @@ the resulting on-screen copy. Real biometric/CAPTCHA gates are out of scope by d
 <h2 id="files">12 · Project map</h2>
 <table>
 <tr><th>Path</th><th>What</th></tr>
-<tr><td><code>cli.py</code></td><td>entrypoint: <code>--check-env</code>, <code>--dry-run</code>, <code>--apk … --test …</code></td></tr>
-<tr><td><code>engine/</code></td><td>device, observation, ocr, resolver, recovery, stabilize, validator, executor, runner, evidence, report, loader, models, config</td></tr>
-<tr><td><code>testcases/</code></td><td>YAML test cases (<code>login.yaml</code>, <code>login_invalid.yaml</code>, <code>nextcloud_login.yaml</code>)</td></tr>
-<tr><td><code>sample-app/</code></td><td>tiny login app + <code>build.ps1</code> (Gradle-free APK build)</td></tr>
+<tr><td><code>cli.py</code></td><td>entrypoint + subcommands: <code>inspect · run · doctor · replay</code>, plus <code>--check-env</code>, <code>--dry-run</code></td></tr>
+<tr><td><code>engine/inspect.py</code></td><td><strong>new</strong> — perception: <code>Element</code>, <code>parse_elements</code>, fingerprints, <code>rank_candidates</code>, <code>screen_diff</code>, <code>format_table</code></td></tr>
+<tr><td><code>engine/selector_cache.py</code></td><td><strong>new</strong> — self-healing per-screen <code>label → selector</code> cache</td></tr>
+<tr><td><code>engine/</code> (rest)</td><td>device, observation, ocr, resolver, recovery, stabilize, validator, executor, runner, evidence, report, loader, models, config</td></tr>
+<tr><td><code>testcases/</code></td><td>YAML cases inc. <code>shop_login_semantic.yaml</code> (zero ids), <code>login.yaml</code>, <code>nextcloud_login.yaml</code>, <code>sauce.yaml</code></td></tr>
 <tr><td><code>examples/manual_flow.py</code></td><td>drive a flow by hand, probe selectors</td></tr>
-<tr><td><code>docs/TEST_GUIDE.md</code></td><td>step-by-step command runbook (with expected output per step)</td></tr>
-<tr><td><code>reports/&lt;run_id&gt;/</code></td><td>generated evidence + <code>report.html</code> per run (timestamped, git-ignored)</td></tr>
-<tr><td><code>tests/</code></td><td>the engine's own unit tests (run with <code>py -m pytest -q</code>)</td></tr>
+<tr><td><code>docs/TEST_GUIDE.md</code></td><td>step-by-step command runbook (phases, semantic flow, inspect/replay)</td></tr>
+<tr><td><code>CHANGELOG.md</code></td><td>dated record of every change (phases 1–6, fixes, validation)</td></tr>
+<tr><td><code>screens/&lt;label&gt;/</code></td><td><code>inspect</code> bundles (git-ignored)</td></tr>
+<tr><td><code>reports/&lt;run_id&gt;/</code></td><td>per-run evidence + <code>report.html</code> + <code>bindings.json</code> (timestamped, git-ignored)</td></tr>
+<tr><td><code>.selector-cache/&lt;pkg&gt;.json</code></td><td>learned bindings, reused across runs (git-ignored)</td></tr>
+<tr><td><code>tests/</code></td><td>unit tests inc. <code>test_inspect</code>, <code>test_locator</code>, <code>test_semantic</code>, <code>test_validation_extra</code>, <code>test_recovery_dialog</code>, <code>test_cli_replay</code></td></tr>
 </table>
 
 <footer>Mobile QA Test Runner · open <code>docs/index.html</code> in a browser · commands use the <code>py</code> launcher on Windows.</footer>
