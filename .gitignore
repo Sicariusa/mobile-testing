@@ -17,8 +17,11 @@ apks/
 # Sample-app build intermediates (rebuild with sample-app/build.ps1)
 sample-app/build/
 
-# Scratch screenshots from examples/manual_flow.py (curated demos live in docs/demo/)
+# Scratch screenshots from examples/manual_flow.py
 manual-demo/
+
+# Inspected screen bundles (engine --inspect output)
+screens/
 
 # OS / editor
 .DS_Store

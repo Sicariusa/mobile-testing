@@ -11,9 +11,14 @@ overall result plus the path to the HTML report.
 from __future__ import annotations
 
 import argparse
+import json
+import os
 import sys
+import time
 
 from engine import device as device_mod
+from engine import inspect as inspect_mod
+from engine.observation import observe
 
 
 _LEVEL_NOTE = {
@@ -74,6 +79,61 @@ def cmd_dry_run(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_inspect(args: argparse.Namespace) -> int:
+    """Fetch the selectors of the CURRENT screen (any screen/popup) into a
+    bundle, so a flow can be authored/verified against real ids."""
+    try:
+        dev = device_mod.connect(serial=args.serial)
+    except device_mod.DeviceError as exc:
+        print(f"Device error: {exc}", file=sys.stderr)
+        return 3
+
+    if args.apk:
+        try:
+            meta = device_mod.read_apk_metadata(args.apk)
+            dev.install(args.apk)
+            if args.launch and meta.get("package"):
+                dev.launch(meta["package"], meta.get("launch_activity"))
+                time.sleep(2)
+        except device_mod.DeviceError as exc:
+            print(f"APK step failed: {exc}", file=sys.stderr)
+
+    out_dir = os.path.join(args.screens_dir, args.label)
+    os.makedirs(out_dir, exist_ok=True)
+    obs = observe(dev, os.path.join(out_dir, "screenshot.png"))
+    els = obs.elements()
+    interesting = inspect_mod.interesting(els)
+
+    with open(os.path.join(out_dir, "hierarchy.xml"), "w", encoding="utf-8") as fh:
+        fh.write(obs.hierarchy_xml or "")
+    bundle = {
+        "package": obs.package, "activity": obs.activity,
+        "structural_fingerprint": obs.structural_fingerprint(),
+        "content_fingerprint": obs.content_fingerprint(),
+        "window": obs.window(),
+        "element_count": len(els), "interesting_count": len(interesting),
+        "elements": [e.as_dict() for e in els],
+    }
+    with open(os.path.join(out_dir, "observation.json"), "w", encoding="utf-8") as fh:
+        json.dump(bundle, fh, indent=2, ensure_ascii=False)
+    md = (f"# Screen: {args.label}\n\n"
+          f"- package: `{obs.package}`\n- activity: `{obs.activity}`\n"
+          f"- structural fingerprint: `{obs.structural_fingerprint()}`\n"
+          f"- elements: {len(els)} ({len(interesting)} interesting)\n\n"
+          + inspect_mod.format_table(els) + "\n")
+    with open(os.path.join(out_dir, "inventory.md"), "w", encoding="utf-8") as fh:
+        fh.write(md)
+
+    print(f"Screen: {args.label}   activity={obs.activity}")
+    print(inspect_mod.format_table(els))
+    if not interesting:
+        print("\n⚠ No interesting elements — the app may use a custom/Canvas/WebView "
+              "surface; OCR of the screenshot is the perception fallback.")
+    print(f"\nSaved bundle → {out_dir}\\ (observation.json, hierarchy.xml, "
+          "screenshot.png, inventory.md)")
+    return 0
+
+
 def cmd_run(args: argparse.Namespace) -> int:
     # fail early with precise guidance rather than a stack trace
     report = device_mod.probe_environment()
@@ -110,15 +170,30 @@ def build_parser() -> argparse.ArgumentParser:
                    help="Diagnose tooling/device readiness and exit.")
     p.add_argument("--dry-run", action="store_true",
                    help="Validate --test and print its step plan without a device.")
+    p.add_argument("--inspect", action="store_true",
+                   help="Fetch the current screen's selectors into a bundle.")
+    p.add_argument("--label", default="screen",
+                   help="Name for the inspected screen's folder (default: screen).")
+    p.add_argument("--launch", action="store_true",
+                   help="With --inspect + --apk: install and launch before scanning.")
+    p.add_argument("--screens-dir", default="screens",
+                   help="Where --inspect writes screen bundles (default: screens).")
     return p
 
 
 def main(argv: list[str] | None = None) -> int:
+    argv = list(sys.argv[1:] if argv is None else argv)
+    command = None
+    if argv and argv[0] in ("inspect", "run", "doctor"):
+        command = argv.pop(0)
     args = build_parser().parse_args(argv)
-    if args.check_env:
+    if command == "doctor" or args.check_env:
         return cmd_check_env()
+    if command == "inspect" or args.inspect:
+        return cmd_inspect(args)
     if not args.test:
-        print("error: --test is required for a run (or use --check-env).", file=sys.stderr)
+        print("error: --test is required for a run (or use --check-env / inspect).",
+              file=sys.stderr)
         return 2
     if args.dry_run:
         return cmd_dry_run(args)

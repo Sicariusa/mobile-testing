@@ -45,6 +45,20 @@ VALIDATED_OCR = "ocr"
 VALIDATED_CHANGE = "change"
 
 
+class FailureReason:
+    """Why a step could not complete — a precise alternative to a bare BLOCKED."""
+
+    TARGET_NOT_FOUND = "TARGET_NOT_FOUND"
+    TARGET_AMBIGUOUS = "TARGET_AMBIGUOUS"
+    TARGET_DISABLED = "TARGET_DISABLED"
+    TARGET_NOT_CLICKABLE = "TARGET_NOT_CLICKABLE"
+    UNEXPECTED_SCREEN = "UNEXPECTED_SCREEN"
+    RECOVERY_FAILED = "RECOVERY_FAILED"
+    DEVICE_ERROR = "DEVICE_ERROR"
+    APP_CRASHED = "APP_CRASHED"
+    TIMEOUT = "TIMEOUT"
+
+
 @dataclass
 class Observation:
     """A concrete snapshot of the device at one instant.
@@ -68,6 +82,31 @@ class Observation:
     def texts(self) -> set[str]:
         """All non-empty ``text``/``content-desc`` values in the hierarchy."""
         return _hierarchy_texts(self.hierarchy_xml)
+
+    # -- richer perception (lazy; inspect imported here to avoid a cycle) ------
+    def elements(self) -> list[Any]:
+        """Parsed accessibility-tree elements (cached per instance)."""
+        cached = getattr(self, "_elements_cache", None)
+        if cached is None:
+            from . import inspect as inspect_mod
+            cached = inspect_mod.parse_elements(self.hierarchy_xml)
+            self._elements_cache = cached
+        return cached
+
+    def structural_fingerprint(self) -> str:
+        from . import inspect as inspect_mod
+        return inspect_mod.structural_fingerprint(self.activity, self.elements())
+
+    def content_fingerprint(self) -> str:
+        from . import inspect as inspect_mod
+        return inspect_mod.content_fingerprint(self.activity, self.elements())
+
+    def window(self) -> dict[str, bool]:
+        """Overlay/keyboard flags for this screen (dialog detection + keyboard)."""
+        from . import inspect as inspect_mod
+        flags = inspect_mod.window_flags(self.elements())
+        flags["keyboard"] = self.keyboard_visible
+        return flags
 
     @staticmethod
     def transition(before: "Observation", after: "Observation") -> dict[str, Any]:
@@ -158,6 +197,10 @@ class ActionResult:
     detail: str = ""
     error: str = ""
     crash_signature: str = ""
+    # diagnostics on failure — precise reason + on-screen candidates + diff
+    failure_reason: Optional[str] = None
+    suggestions: list[dict[str, Any]] = field(default_factory=list)
+    screen_summary: Optional[dict[str, Any]] = None
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -183,6 +226,9 @@ class ActionResult:
             "detail": self.detail,
             "error": self.error,
             "crash_signature": self.crash_signature,
+            "failure_reason": self.failure_reason,
+            "suggestions": self.suggestions,
+            "screen_summary": self.screen_summary,
         }
 
 

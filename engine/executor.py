@@ -19,13 +19,44 @@ from __future__ import annotations
 import time
 from typing import Any, Optional
 
+from . import inspect as inspect_mod
 from . import models
 from .device import Device
-from .models import ActionResult, RecoveryTrace, Status, now_ms
+from .models import ActionResult, FailureReason, RecoveryTrace, Status, now_ms
 from .observation import observe
 from .recovery import reach
 from .stabilize import settle
 from .validator import logcat_fatal
+
+
+def _diagnose(target: Optional[dict[str, Any]], action: str, after) -> tuple:
+    """Turn a failed resolution into (reason, ranked suggestions, screen summary)
+    so a broken step shows the real on-screen selectors, not a bare BLOCKED."""
+    reason = FailureReason.TARGET_NOT_FOUND
+    suggestions: list[dict[str, Any]] = []
+    summary = None
+    try:
+        els = after.elements() if after else []
+        if after and after.window().get("dialog"):
+            reason = FailureReason.UNEXPECTED_SCREEN
+        query = ""
+        if target:
+            query = (target.get("text") or target.get("label")
+                     or target.get("desc") or "")
+            if not query and target.get("id"):
+                query = target["id"].rsplit("/", 1)[-1]
+        role = "field" if action == "type" else "tappable"
+        if query:
+            suggestions = [c.as_dict()
+                           for c in inspect_mod.rank_candidates(query, els, role=role)]
+        summary = {
+            "activity": after.activity if after else None,
+            "element_count": len(els),
+            "window": after.window() if after else {},
+        }
+    except Exception:
+        pass
+    return reason, suggestions, summary
 
 # Actions that require a resolved target
 TARGETED_ACTIONS = {"tap", "type", "long_click"}
@@ -68,11 +99,14 @@ def execute(d: Device, step: dict[str, Any], *,
             res, recovery = reach(d, target, sleep=sleep)
             if res is None or not res.found:
                 after = observe(d, after_path)
+                reason, suggestions, summary = _diagnose(target, action, after)
                 return ActionResult(
                     status=Status.BLOCKED, action=action, target=target, value=value,
                     recovery=recovery, before=before, after=after,
                     duration_ms=now_ms() - started,
                     detail="target unreachable after recovery",
+                    failure_reason=reason, suggestions=suggestions,
+                    screen_summary=summary,
                 )
             resolved_by = res.strategy
             resolved_conf = res.confidence
@@ -99,6 +133,7 @@ def execute(d: Device, step: dict[str, Any], *,
             status=Status.FAIL, action=action or "?", target=target, value=value,
             recovery=recovery, before=before, after=after,
             duration_ms=now_ms() - started, error=str(exc),
+            failure_reason=FailureReason.DEVICE_ERROR,
         )
 
     settle_fn(d)
@@ -115,6 +150,7 @@ def execute(d: Device, step: dict[str, Any], *,
         recovery=recovery, before=before, after=after,
         duration_ms=now_ms() - started, detail=detail, error=error,
         crash_signature=fatal or "",
+        failure_reason=FailureReason.APP_CRASHED if fatal else None,
     )
 
 
