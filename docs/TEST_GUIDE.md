@@ -3,8 +3,8 @@
 A top-to-bottom walkthrough: configure an APK → open the emulator → run the
 login flow → validate → then every other flow (negative path, a real
 open-source app, driving the device by hand) and how to read the evidence.
-Commands are Windows PowerShell. Prebuilt example reports live in
-[`docs/demo/`](demo/) — open any `report.html` in a browser.
+Commands are Windows PowerShell. Every run writes its own timestamped report to
+`reports/<run_id>/report.html` — see [§9](#9-how-a-run-executes-and-where-it-is-saved).
 
 ---
 
@@ -122,6 +122,29 @@ Cold boot can take 2–5 minutes. Diagnose everything at once:
 py cli.py --check-env      # every row FOUND, "Live runner: READY"
 ```
 
+**Expected output:**
+
+```
+Mobile QA Environment
+────────────────────────────────────────────────
+  python         ✓ FOUND    (required)  3.12.5
+  adb            ✓ FOUND    (required for live run)  ...\platform-tools\adb.EXE
+  aapt           ✓ FOUND    (required for live run)  ...\build-tools\34.0.0\aapt.EXE
+  tesseract      ✓ FOUND    (required)  ...\Tesseract-OCR\tesseract.EXE
+  emulator       ✓ FOUND    (optional)  ...\emulator\emulator.EXE
+  uiautomator2   ✓ FOUND    (required for live run)
+  pytesseract    ✓ FOUND    (required)
+  Pillow         ✓ FOUND    (required)
+  pyyaml         ✓ FOUND    (required)
+  device         ✓ FOUND    (required for live run)  emulator-5554
+────────────────────────────────────────────────
+  Core tests:  READY
+  Live runner: READY
+```
+
+If `device` is `MISSING`, the runner is `BLOCKED` — boot the emulator (§2). Every
+other `MISSING` row names the tool to install.
+
 ---
 
 ## 3. How the flow runs (and run it)
@@ -133,16 +156,42 @@ without a device:
 py cli.py --dry-run --test testcases\login.yaml
 ```
 
+**Expected output** (the plan, then the env table; exits 0, no device touched):
+
+```
+Test case: Login with valid credentials
+Package:   com.example.shop
+Data:      email=test@example.com, password=Password123
+
+Step plan (7 steps):
+   0. launch
+   1. type target={'id': 'com.example.shop:id/email'} value='{{email}}'
+   2. type target={'id': 'com.example.shop:id/password'} value='{{password}}'
+   3. tap  target={'text': 'Login'}
+   4. assert text_exists value='Welcome'
+   5. assert ocr_text_exists value='PAY NOW'
+   6. assert screen_changed
+```
+
 Then the real end-to-end run — install → launch → type → tap → validate:
 
 ```powershell
 py cli.py --apk sample-app\build\shop-login.apk --test testcases\login.yaml
 ```
 
-Expect `Overall: PASS`, `Steps: PASS=7`, and a report path. Per step the report
-shows **how** the target was found (`resolved_by`: `resource_id` / `text_exact`)
-and **how** the outcome was confirmed (`validated_by`: `hierarchy` / `ocr` /
-`change`). The `PAY NOW` line is validated by real OCR of the screenshot.
+**Expected output:**
+
+```
+Overall: PASS
+Steps:  PASS=7
+Report: reports\20260914-140831\report.html
+```
+
+The `run_id` (`20260914-140831`) is a timestamp, so it differs every run. Per
+step the report shows **how** the target was found (`resolved_by`: `resource_id`
+/ `text_exact`) and **how** the outcome was confirmed (`validated_by`:
+`hierarchy` / `ocr` / `change`). The `PAY NOW` line is validated by real OCR of
+the screenshot. Exit code is `0` on PASS, `1` on FAIL.
 
 ---
 
@@ -153,9 +202,16 @@ py cli.py --apk sample-app\build\shop-login.apk --test testcases\login_invalid.y
 ```
 
 Wrong password → the app shows "Invalid credentials". The screen *changes*, but
-`text_exists("Welcome")` must still **FAIL**. Expect `Overall: FAIL`
-(`PASS=4 · FAIL=1`). This is the guard that change-detection never masks a
-failed assertion.
+`text_exists("Welcome")` must still **FAIL**. This is the guard that
+change-detection never masks a failed assertion.
+
+**Expected output** (exit code `1`):
+
+```
+Overall: FAIL
+Steps:  PASS=4 · FAIL=1
+Report: reports\20260914-141014\report.html
+```
 
 ---
 
@@ -170,6 +226,14 @@ Drives Nextcloud's real login screen: open login → type a server address →
 submit → the app reports "Could not find host" (validated by `hierarchy`) plus a
 `screen_changed`. Real credential login needs a live server/account, so this
 validates the reachable, offline-deterministic part of the flow.
+
+**Expected output:**
+
+```
+Overall: PASS
+Steps:  PASS=6
+Report: reports\20260914-142249\report.html
+```
 
 ---
 
@@ -192,8 +256,26 @@ py examples\manual_flow.py --serial emulator-5554 `
   --expect-text "Could not find host" --expect-ocr ""
 ```
 
-It prints each step and the validator verdict, saving screenshots to
-`manual-demo\`.
+**Expected output** (defaults / sample app):
+
+```
+connected: emulator-5554
+
+[0] launch com.example.shop
+    activity: .MainActivity
+[1] type email -> com.example.shop:id/email
+[2] type password -> com.example.shop:id/password
+[3] tap login
+
+[4] validate
+    text_exists 'Welcome'      -> PASS  validated_by=hierarchy
+    ocr_text_exists 'PAY NOW'  -> PASS  validated_by=ocr
+
+screenshots in ...\manual-demo
+```
+
+It prints each step and the validator verdict, saving `01_launched.png` …
+`04_after_login.png` to `manual-demo\` (that folder is scratch / git-ignored).
 
 ---
 
@@ -201,6 +283,13 @@ It prints each step and the validator verdict, saving screenshots to
 
 ```powershell
 py -m pytest -q      # expect all green
+```
+
+**Expected output:**
+
+```
+......................................................                   [100%]
+54 passed in 5.63s
 ```
 
 The engine is verified against a scripted `FakeDevice` + screenshots that real
@@ -218,13 +307,74 @@ Start-Process "reports\$($run.Name)\report.html"
 Get-Content "reports\$($run.Name)\timeline.json" | ConvertFrom-Json | Format-Table index,status,action,resolved_by,validated_by
 ```
 
-Prebuilt examples are committed in [`docs/demo/`](demo/):
-`sample-login-pass/`, `sample-login-fail/`, `nextcloud-login/` — open each
-`report.html`.
+**Expected `timeline.json` shape** (one row per step):
+
+```
+index status  action                  resolved_by  validated_by
+----- ------  ------                  -----------  ------------
+    0 PASS    launch
+    1 PASS    type                    resource_id
+    2 PASS    type                    resource_id
+    3 PASS    tap                     text_exact
+    4 PASS    assert:text_exists                   hierarchy
+    5 PASS    assert:ocr_text_exists               ocr
+    6 PASS    assert:screen_changed                change
+```
 
 ---
 
-## 9. Optional knobs (engine/config.py)
+## 9. How a run executes and where it is saved
+
+**Where step execution starts.** `cli.py` → `cmd_run()` → `engine/runner.py`
+`run()`. Inside `run()` the loop that actually walks the test case is:
+
+```
+engine/runner.py:64    for i, step in enumerate(tc["steps"]):
+engine/runner.py:76        _run_assert(...)          # if the step is an assert
+engine/runner.py:79        executor_mod.execute(...) # if the step is an action
+engine/runner.py:91        ev.save_step(i, res)      # persist this step's evidence
+```
+
+Order inside `run()`:
+
+1. `load_testcase()` parses + validates the YAML (bad file → clear error, no device touched).
+2. `run_id = datetime.now().strftime("%Y%m%d-%H%M%S")` — the timestamp folder name.
+3. `Evidence(run_id)` creates `reports/<run_id>/` (and `steps/`).
+4. `device.install(apk)` if `--apk` was given.
+5. **The step loop (line 64)** — each action goes to `executor.execute()`
+   (observe → resolve+recover → perform → settle → observe → crash-gate); each
+   assert goes to `_run_assert()` (the fixed-order validator). A `CRASH` or
+   `BLOCKED` step aborts the rest, which are marked `SKIPPED`.
+6. After the loop: `ev.write_logcat()`, `ev.write_timeline(meta)`, then
+   `report.render(...)` writes `report.html`. `run()` returns
+   `{overall, run_id, report_path, ...}`, which `cli.py` prints.
+
+**Where output is saved** — one self-contained folder per run
+(`engine/evidence.py`):
+
+```
+reports/<run_id>/
+  steps/
+    0/  before.png  after.png  hierarchy.xml  step.json      # per step:
+    1/  before.png  after.png  hierarchy.xml  step.json      #   before/after
+    2/  ...                                                    #   screenshots,
+    …                                                         #   the after-hierarchy,
+  logcat.txt          # full logcat captured since launch      #   and the full
+  timeline.json       # every step (drives the HTML report)     #   ActionResult
+  report.html         # the human report (open this)
+```
+
+- `before.png` / `after.png` — screenshots taken by `observe()` before and after the step.
+- `hierarchy.xml` — the after-step accessibility tree.
+- `step.json` — the full `ActionResult`: status, `resolved_by`, `validated_by`, recovery attempts, OCR matches, timings.
+- `report.html` — sits in `reports/<run_id>/` and references the step PNGs by relative path, so keep the folder together when sharing.
+
+There is **no committed demo folder** — each run generates its own
+`reports/<run_id>/` (git-ignored). To share one, zip that whole folder.
+
+---
+
+## 10. Optional knobs (engine/config.py)
 
 | Setting | Default | Effect |
 |---------|---------|--------|
