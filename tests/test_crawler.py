@@ -309,6 +309,49 @@ class NoScrollableDevice:
     def invalidate(self): pass
 
 
+# --- context: content actions before nav chrome (the "don't get lost" fix) ----
+PRIO_START = """<hierarchy>
+  <node class="android.widget.FrameLayout" bounds="[0,0][1080,2000]">
+    <node class="android.widget.Button" content-desc="test-Menu" clickable="true" enabled="true" bounds="[0,100][200,250]"/>
+    <node class="android.widget.Button" text="ADD TO CART" clickable="true" enabled="true" bounds="[0,1000][1080,1160]"/>
+  </node>
+</hierarchy>"""
+LEAF = '<hierarchy><node class="V" text="{t}" bounds="[0,0][100,50]"/></hierarchy>'
+
+
+class PriorityDevice:
+    """One screen with a top-bar Menu icon (nav chrome) and a content ADD TO CART
+    button. Tapping Menu -> 'menu'; tapping Add -> 'added'."""
+    def __init__(self): self.screen = "start"
+    def launch(self, p, a=None): self.screen = "start"
+    def current_package(self): return "com.demo"
+    def current_activity(self): return "." + self.screen
+    def dump_hierarchy(self):
+        return PRIO_START if self.screen == "start" else LEAF.format(t=self.screen)
+    def keyboard_visible(self): return False
+    def screenshot(self, path): return path
+    def tap_xy(self, x, y):
+        if self.screen == "start":
+            if (x, y) == (100, 175): self.screen = "menu"
+            elif (x, y) == (540, 1080): self.screen = "added"
+    def scroll_forward(self): pass
+    def swipe(self, *a, **k): pass
+    def press_back(self):
+        if self.screen != "start": self.screen = "start"
+    def invalidate(self): pass
+
+
+def test_content_action_is_tapped_before_nav_chrome(tmp_path):
+    dev = PriorityDevice()
+    lib = ScreenLibrary("com.demo", base_dir=str(tmp_path))
+    s = crawl(dev, "com.demo", lib, max_screens=2, launch=False, screenshots=False,
+              sleep=lambda *_: None, settle_fn=lambda *a, **k: True)
+    acts = [c["activity"] for c in s["captured"]]
+    # ADD TO CART (content) beat the Menu (chrome): 'added' captured, 'menu' not
+    assert ".added" in acts
+    assert ".menu" not in acts
+
+
 def test_no_scroll_when_no_scrollable_container(tmp_path):
     dev = NoScrollableDevice()
     lib = ScreenLibrary("com.demo", base_dir=str(tmp_path))

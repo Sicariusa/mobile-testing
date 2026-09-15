@@ -44,10 +44,40 @@ def _tappable(el) -> bool:
 
 
 def _signature(el) -> tuple:
-    """A stable identity for de-duping candidates across scroll positions —
-    reuses the Element fields the resolver relies on (id/class/text/desc) plus
-    the tap center, so two blank-label buttons are not conflated."""
-    return (el.resource_id, el.cls, el.text, el.content_desc, el.center())
+    """A **scroll-stable** identity for de-duping and re-finding a candidate across
+    scroll positions — the tap center moves when the screen scrolls, so identity is
+    the resolver's own fields (id/class/text/desc), not coordinates. Two truly
+    blank buttons can conflate, but those are icon chrome (deprioritised)."""
+    return (el.resource_id, el.cls, el.text, el.content_desc)
+
+
+# Navigation-chrome tokens (matched against resource-id / content-desc). These are
+# the app's own nav affordances, not in-content actions.
+_NAV_TOKENS = ("menu", "hamburger", "drawer", "navigate up", "test-cart",
+               "back to", "test-back", "bottomnav", "toolbar", "tab_", "app_bar")
+
+
+def _looks_nav(el) -> bool:
+    """Is this control app navigation chrome (a hamburger, back arrow, cart icon,
+    tab bar) rather than an in-content action?"""
+    hay = (el.resource_id + " " + el.content_desc).lower()
+    if any(tok in hay for tok in _NAV_TOKENS):
+        return True
+    # an icon-only control (no text/desc) sitting high in the app-bar region
+    if not el.text.strip() and not el.content_desc.strip():
+        return int(el.bounds.get("top", 0)) < 320
+    return False
+
+
+def _priority(el) -> int:
+    """Higher = tapped sooner. In-content actions (a control with real text, e.g.
+    'ADD TO CART') beat nav chrome, so a crawl reaches the content action before
+    the hamburger menu — the inspector's element data drives the ordering."""
+    label = (el.text.strip() or el.content_desc.strip())
+    p = 2 if (len(label) >= 3 and any(c.isalpha() for c in label)) else 0
+    if _looks_nav(el):
+        p -= 3
+    return p
 
 
 def crawl(device: Device, package: str, library: ScreenLibrary, *,
@@ -113,11 +143,10 @@ def crawl(device: Device, package: str, library: ScreenLibrary, *,
             if e.clickable and e.enabled and not e.editable and _is_destructive(e):
                 skipped.add((e.text or e.content_desc or e.resource_id or "").strip())
 
-    def _reveal_scrolled(obs) -> bool:
-        """Scroll to reveal more of the current screen. Returns True if the view
-        actually changed (more may be revealed), False at the bottom / when there
-        is no scrollable container. Compares the *raw* (activity, hierarchy) so a
-        text/bounds-only change still counts — never the text-blind fingerprint."""
+    def _scroll_changed(obs) -> bool:
+        """Scroll forward once. True if the view changed (more may be revealed),
+        False at the bottom / with no scrollable container. Compares the *raw*
+        (activity, hierarchy) so a text/bounds-only change counts."""
         if not any(e.scrollable for e in obs.elements()):
             return False
         before = recovery._screen_signature(device)
@@ -127,6 +156,56 @@ def crawl(device: Device, package: str, library: ScreenLibrary, *,
             return False
         settle_fn(device)
         return recovery._screen_signature(device) != before
+
+    def _scroll_to_top() -> None:
+        """Drag the content back to the top (opposite of scroll_forward) so the
+        prioritised tapping pass starts from a known position."""
+        for _ in range(CRAWL_MAX_SCROLLS_PER_SCREEN + 1):
+            before = recovery._screen_signature(device)
+            try:
+                device.swipe(400, 700, 400, 1700, 0.2)
+            except Exception:
+                return
+            settle_fn(device)
+            if recovery._screen_signature(device) == before:
+                return
+
+    def _gather(entry_obs) -> list[dict[str, Any]]:
+        """Enumerate every safe candidate on this screen — visible AND below the
+        fold — without tapping, recording each one's priority. Notes destructive
+        controls in passing, then returns the screen to the top."""
+        found: dict[tuple, int] = {}
+        obs, scrolls = entry_obs, 0
+        while True:
+            _note_destructive(obs)
+            for e in obs.elements():
+                if _tappable(e):
+                    found.setdefault(_signature(e), _priority(e))
+            if scrolls >= CRAWL_MAX_SCROLLS_PER_SCREEN or not _scroll_changed(obs):
+                break
+            scrolls += 1
+            nxt = _in_app()
+            if nxt is None:
+                break
+            obs = nxt
+        if scrolls:
+            _scroll_to_top()
+        return [{"sig": s, "priority": p} for s, p in found.items()]
+
+    def _bring_into_view(sig: tuple):
+        """Scroll from the top until an element with this signature is on screen;
+        return it (fresh coordinates) or None if it can't be reached."""
+        scrolls = 0
+        while True:
+            here = _in_app()
+            if here is None:
+                return None
+            for e in here.elements():
+                if _signature(e) == sig:
+                    return e
+            if scrolls >= CRAWL_MAX_SCROLLS_PER_SCREEN or not _scroll_changed(here):
+                return None
+            scrolls += 1
 
     def _explore(depth: int) -> None:
         if len(captured) >= max_screens or taps["n"] >= CRAWL_MAX_TAPS:
@@ -143,30 +222,29 @@ def crawl(device: Device, package: str, library: ScreenLibrary, *,
         if depth >= max_depth:
             return
 
-        # Walk this screen's safe candidates, revealing below-the-fold ones with
-        # bounded scrolls. `tried` (by element signature, not label) prevents
-        # re-tapping the same control across scroll positions and across the
-        # re-scan that follows a child exploration.
+        # Gather the whole screen's candidates first (visible + below the fold),
+        # then tap CONTENT ACTIONS before NAV CHROME — so a small budget reaches an
+        # add-to-cart button before it is spent on the hamburger menu. Stable
+        # sort keeps enumeration order within equal priority.
+        candidates = sorted(_gather(obs), key=lambda c: c["priority"], reverse=True)
         tried: set[tuple] = set()
-        scrolls = 0
-        while len(captured) < max_screens and taps["n"] < CRAWL_MAX_TAPS:
-            here = _in_app()                        # always tap from a fresh, in-app view
+        for cand in candidates:
+            if len(captured) >= max_screens or taps["n"] >= CRAWL_MAX_TAPS:
+                break
+            sig = cand["sig"]
+            if sig in tried:
+                continue
+            tried.add(sig)
+            el = _bring_into_view(sig)              # scroll it into view for fresh coords
+            if el is None:
+                continue
+            here = _in_app()
             if here is None:
                 break
-            _note_destructive(here)
-            cand = next((e for e in here.elements()
-                         if _tappable(e) and _signature(e) not in tried), None)
-            if cand is None:                        # nothing new visible — reveal more?
-                if scrolls >= CRAWL_MAX_SCROLLS_PER_SCREEN or not _reveal_scrolled(here):
-                    break
-                scrolls += 1
-                continue
-
-            tried.add(_signature(cand))
             pre_fp = here.structural_fingerprint()  # may differ from fp when scrolled
             taps["n"] += 1
             try:
-                device.tap_xy(*cand.center())       # fresh coords from `here`
+                device.tap_xy(*el.center())
             except Exception:
                 continue
             settle_fn(device)
