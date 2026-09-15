@@ -37,6 +37,35 @@ def test_readonly_endpoints_work_without_a_device():
 
         code, scr = _get(base, "/api/screens?package=does.not.exist")
         assert code == 200 and scr["screens"] == []
+
+        code, avds = _get(base, "/api/avds")
+        assert code == 200 and isinstance(avds["avds"], list)
+
+        code, apks = _get(base, "/api/apks")
+        assert code == 200 and isinstance(apks["apks"], list)
+    finally:
+        httpd.shutdown()
+
+
+def test_preflight_endpoint_reports_capture_state():
+    httpd, base = _server()
+    try:
+        tcs = _get(base, "/api/testcases")[1]
+        code, pf = _get(base, "/api/preflight?test=" + tcs[0]["path"])
+        assert code == 200 and "captured" in pf and "rows" in pf
+    finally:
+        httpd.shutdown()
+
+
+def test_preflight_without_test_is_400():
+    httpd, base = _server()
+    try:
+        try:
+            urllib.request.urlopen(base + "/api/preflight")
+            ok = False
+        except urllib.error.HTTPError as exc:
+            ok = exc.code == 400
+        assert ok
     finally:
         httpd.shutdown()
 

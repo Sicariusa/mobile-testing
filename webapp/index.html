@@ -48,6 +48,11 @@
 <main>
   <div class="card">
     <h2>Environment</h2>
+    <div class="row">
+      <select id="avd" title="Android Virtual Device"><option>—</option></select>
+      <button class="primary" onclick="startEmu()">Start emulator</button>
+      <button onclick="stopEmu()">Stop</button>
+    </div>
     <div id="env" class="muted">loading…</div>
   </div>
 
@@ -56,6 +61,7 @@
     <div class="row">
       <input id="pkg" placeholder="package (e.g. com.swaglabsmobileapp)" style="flex:1">
       <button onclick="loadScreens()">Load</button>
+      <button onclick="launchApp()" title="open the app to its home screen">Launch app</button>
     </div>
     <div class="row">
       <input id="caplabel" placeholder="label (e.g. catalog)">
@@ -66,6 +72,10 @@
 
   <div class="card full">
     <h2>Test cases</h2>
+    <div class="row">
+      <span class="muted">Install before run (optional):</span>
+      <select id="apk"><option value="">— no APK, use installed —</option></select>
+    </div>
     <table id="tests"><thead><tr><th>Name</th><th>Package</th><th>Steps</th><th></th></tr></thead>
     <tbody><tr><td class="muted">loading…</td></tr></tbody></table>
   </div>
@@ -94,13 +104,63 @@ async function loadEnv(){
     $("#devpill").className = "pill "+(e.devices&&e.devices.length?"ok":"bad");
   }catch(err){ $("#env").innerHTML = `<span class="bad">${err.message}</span>`; }
 }
+async function loadAvds(){
+  try{
+    const j = await api("/api/avds"); const sel = $("#avd");
+    sel.innerHTML = j.avds.length ? j.avds.map(a=>`<option>${a}</option>`).join("")
+                                  : `<option>— no AVDs —</option>`;
+  }catch(err){ /* emulator optional */ }
+}
+async function loadApks(){
+  try{
+    const j = await api("/api/apks");
+    $("#apk").innerHTML = `<option value="">— no APK, use installed —</option>`+
+      j.apks.map(a=>`<option value="${a.path}">${a.name}</option>`).join("");
+  }catch(err){ /* optional */ }
+}
+async function startEmu(){
+  const avd = $("#avd").value;
+  log("starting emulator '"+avd+"' … (boot takes ~30–60s; watch the device pill)");
+  try{
+    const r = await api("/api/emulator",{method:"POST",headers:{'Content-Type':'application/json'},body:JSON.stringify({action:"start",avd})});
+    log("emulator "+r.avd+" booting — "+r.note,"ok");
+    let n=0; const t=setInterval(async()=>{ await loadEnv();
+      const dev=$("#devpill").textContent.startsWith("device");
+      if(dev||++n>18){ clearInterval(t); if(dev) log("device online.","ok"); } }, 5000);
+  }catch(err){ log("start failed: "+err.message,"bad"); }
+}
+async function stopEmu(){
+  try{ await api("/api/emulator",{method:"POST",headers:{'Content-Type':'application/json'},body:JSON.stringify({action:"stop"})});
+    log("emulator stopped.","warn"); setTimeout(loadEnv,1500);
+  }catch(err){ log("stop failed: "+err.message,"bad"); }
+}
+async function launchApp(){
+  const pkg = $("#pkg").value.trim(); if(!pkg){ log("enter a package first","warn"); return; }
+  try{ await api("/api/launch",{method:"POST",headers:{'Content-Type':'application/json'},body:JSON.stringify({package:pkg})});
+    log("launched "+pkg+" — drive it to the screen you want, then Capture.","ok");
+  }catch(err){ log("launch failed: "+err.message,"bad"); }
+}
+async function preflight(path){
+  log("preflight "+path+" …");
+  try{
+    const r = await api("/api/preflight?test="+encodeURIComponent(path));
+    if(!r.captured){ log(r.message||("no screens captured for "+r.package),"warn"); return; }
+    const lines = r.rows.map(x=> x.found
+      ? `  <span class="ok">✓</span> [${x.index}] ${x.action} '${x.query}' → on '${x.screen}' near (${x.center})`
+      : `  <span class="bad">✗</span> [${x.index}] ${x.action} '${x.query}' — not captured`).join("\n");
+    const tail = r.unknown ? `<span class="warn">${r.unknown} target(s) not captured (resolved live at run time)</span>`
+                           : `<span class="ok">All targets known.</span>`;
+    log(`preflight ${r.package} (${r.captured} screens):\n${lines}\n${tail}`);
+  }catch(err){ log("preflight failed: "+err.message,"bad"); }
+}
 async function loadTests(){
   try{
     const t = await api("/api/testcases");
     $("#tests tbody").innerHTML = t.map(tc=>`<tr>
       <td>${tc.error?`<span class="bad" title="${tc.error}">${tc.name} ⚠</span>`:tc.name}</td>
       <td class="muted">${tc.package||'—'}</td><td>${tc.steps??'—'}</td>
-      <td><button class="primary" onclick="run('${tc.path.replace(/\\/g,'\\\\')}')" ${tc.error?'disabled':''}>Run</button></td>
+      <td><button onclick="preflight('${tc.path.replace(/\\/g,'\\\\')}')" ${tc.error?'disabled':''}>Preflight</button>
+          <button class="primary" onclick="run('${tc.path.replace(/\\/g,'\\\\')}')" ${tc.error?'disabled':''}>Run</button></td>
     </tr>`).join("");
   }catch(err){ $("#tests tbody").innerHTML = `<tr><td class="bad">${err.message}</td></tr>`; }
 }
@@ -123,11 +183,19 @@ async function capture(){
   }catch(err){ log("capture failed: "+err.message,"bad"); }
 }
 async function run(path){
-  log("running "+path+" … (this drives the device)");
+  const apk = $("#apk").value || null;
+  log("running "+path+(apk?(" (install "+apk+")"):"")+" … (this drives the device)");
   try{
-    const r = await api("/api/run",{method:"POST",headers:{'Content-Type':'application/json'},body:JSON.stringify({test:path})});
+    const r = await api("/api/run",{method:"POST",headers:{'Content-Type':'application/json'},body:JSON.stringify({test:path,apk})});
     const cls = r.overall==="PASS"?"ok":"bad";
     log(`${path} → ${r.overall}  (${Object.entries(r.counts).map(([k,v])=>k+"="+v).join(" · ")})`,cls);
+    (r.diagnostics||[]).forEach(d=>{
+      const near = (d.suggestions||[]).map(s=>`        ${s.score.toFixed(2)} ${s.kind} '${s.label}'`).join("\n");
+      log(`  <span class="warn">[${d.index}] ${d.status}</span> ${d.action}`+(d.target?` target='${d.target}'`:"")
+        +(d.reason||d.detail?`\n     reason: ${d.reason||''}${d.detail?' — '+d.detail:''}`:"")
+        +(d.screen?`\n     screen: ${d.screen.activity} · ${d.screen.element_count} elements`:"")
+        +(near?`\n     nearest:\n${near}`:""));
+    });
     loadReports();
   }catch(err){ log("run failed: "+err.message,"bad"); }
 }
@@ -144,7 +212,7 @@ async function loadReports(){
   }catch(err){ $("#reports").innerHTML = `<span class="bad">${err.message}</span>`; }
 }
 function viewReport(url){ const f=$("#reportframe"); f.src=url; f.hidden=false; }
-function refreshAll(){ loadEnv(); loadTests(); loadReports(); }
+function refreshAll(){ loadEnv(); loadTests(); loadReports(); loadAvds(); loadApks(); }
 refreshAll();
 </script>
 </body>
