@@ -10,6 +10,28 @@ web control panel. Builds on the perception-first engine below.
 
 ### Added
 
+- **Scroll-aware auto-crawl** (`engine/crawler.py`, `engine/inspect.py`) — the
+  crawler now reveals **below-the-fold** controls (e.g. an add-to-cart button
+  under the price) by scrolling a screen up to `CRAWL_MAX_SCROLLS_PER_SCREEN`
+  times when it has a scrollable container and each scroll changes the *observable*
+  UI (raw activity+hierarchy compare, reusing `recovery._screen_signature`). A
+  scroll position is never captured as a screen; candidates are de-duped by a
+  stable element **signature** (id/class/text/desc/center), not by label; and the
+  backtracking invariant is explicit — after exploring a child it returns to the
+  parent (verified in-app on the parent fingerprint) before the next candidate.
+  `Element` gained a `scrollable` flag.
+- **Failure classification & structured evidence** — a failed assertion is now a
+  readable **defect report**, not a bare FAIL. `FailureReason.ASSERTION_FAILED`
+  ("expected behaviour not observed" — a *neutral* engine fact); the validator
+  attaches first-class **`expected` / `actual` / `observed_texts`** (on-screen
+  evidence, ordering-only, never deciding the verdict); the runner sets the
+  `failure_reason` and a `screen_summary` from the **post-condition** observation
+  (the failure state). `report.py` renders an Expected/Actual/Observed block and a
+  presentational tag — **"Likely defect"** for `ASSERTION_FAILED`, **"Couldn't
+  reach target"** for BLOCKED, "App crashed", "Environment/device error" — so a
+  bug reads differently from an unreachable target. Terminal diagnostics show the
+  same. New scenario `testcases/sauce_problem_user_bug.yaml` (SwagLabs
+  `problem_user`, a real buggy account) drives this to a flagged failure.
 - **Auto-crawl** (`engine/crawler.py`, new) — bounded, deterministic screen
   discovery that **reuses the runner's own perception (`observe` + fingerprint)
   and the `Device` action seam** — not a second engine. Captures up to

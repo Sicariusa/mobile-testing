@@ -288,6 +288,18 @@ screen** (never taps stale coordinates). With `launch=False` (the panel/CLI
 default) it starts from the screen already open — so a crawl from checkout
 captures the checkout flow, not home. No LLM.
 
+**Scroll-aware discovery.** Candidates are gathered across the current view *and*
+bounded reveal-scrolls (`CRAWL_MAX_SCROLLS_PER_SCREEN`), so a below-the-fold
+control (add-to-cart under the price) is revealed and tapped. It scrolls only when
+the screen has a scrollable container (`Element.scrollable`) and each scroll
+changes the *observable* UI — a raw `(activity, hierarchy)` compare via
+`recovery._screen_signature` (sensitive to text/bounds, unlike the text-blind
+fingerprint), stopping at the bottom. A scroll position is never captured as a
+screen; candidates de-dupe by a stable **element signature**
+(id/class/text/desc/center), not by label, so blank-label buttons aren't
+conflated. The **backtracking invariant**: after exploring a child it returns to
+the parent (verified in-app on the parent fingerprint) before the next candidate.
+
 ---
 
 ## 10. Recovery ladder (`engine/recovery.py`)
@@ -381,6 +393,19 @@ pixel-diff ratio.
 > any other expectation. A tap that lands on an error screen changes the screen
 > but is not a success — so `text_exists("Welcome")` must fail there, and does
 > (`tests/test_validator.py::test_error_screen_does_not_pass_success_assertion`).
+
+**Failure classification & structured evidence.** A non-PASS step carries neutral,
+first-class evidence — not a verdict about the app. The validator attaches
+`expected` / `actual` / `observed_texts` (the on-screen texts, ordered by
+closeness to `expected` for readability — ordering only, never deciding the
+verdict); the runner (`_run_assert`) sets `failure_reason = ASSERTION_FAILED`
+("expected behaviour not observed") and a `screen_summary` from the **post-
+condition** observation (the failure state, not `before`). The engine stays
+neutral — the **report** (`report.py`) does the interpreting, tagging an
+`ASSERTION_FAILED` step **"Likely defect"** and a BLOCKED step **"Couldn't reach
+target"** (also "App crashed", "Environment/device error"). So a real app bug
+reads differently from an unreachable target, and the report renders
+Expected/Actual/Observed from those structured fields — it never parses `detail`.
 
 ---
 

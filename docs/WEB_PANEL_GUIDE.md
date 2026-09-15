@@ -118,10 +118,12 @@ That is the entire workflow with no terminal beyond step 1's `py cli.py web`
   crawl begins" — handy for a flow like checkout.
 - **Auto-crawl** — pick **1–5** screens and **Start crawl** to discover screens
   automatically. It **starts from the screen already open** (drive to checkout,
-  then crawl the checkout flow) unless you tick **launch app first**. It is safe
-  by construction: bounded depth + screen count, skips already-seen screens,
-  **never taps logout / delete / pay** (skips are reported), never types, and
-  backs out if a tap leaves the app. The screen it starts on is auto-marked 📍.
+  then crawl the checkout flow) unless you tick **launch app first**. It **scrolls
+  to reveal below-the-fold controls** (e.g. an add-to-cart button under the price)
+  and taps them. It is safe by construction: bounded depth + screen count + scroll
+  count, skips already-seen screens, **never taps logout / delete / pay** (skips
+  are reported), never types, and backs out if a tap leaves the app. The screen it
+  starts on is auto-marked 📍.
 
 > **Auto-crawl vs manual — both write the same library.** Manual capture is
 > precise (you pick each screen); auto-crawl is fast breadth from a starting
