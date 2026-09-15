@@ -19,7 +19,7 @@ from __future__ import annotations
 
 import difflib
 import xml.etree.ElementTree as ET
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Optional
 
 from . import models
@@ -35,6 +35,24 @@ class ValidationOutcome:
     confidence: Optional[float] = None
     detail: str = ""
     crash_signature: str = ""
+    # structured evidence (does NOT influence the verdict — enrichment only)
+    expected: Optional[str] = None
+    actual: Optional[str] = None
+    observed_texts: list = field(default_factory=list)
+
+
+def _observed_texts(obs, expected: Optional[str], limit: int = 8) -> list:
+    """On-screen texts as failure evidence, ordered by closeness to ``expected``
+    for readability. Ordering only — it never decides pass/fail."""
+    try:
+        texts = [t for t in obs.texts() if t]
+    except Exception:
+        return []
+    if expected:
+        want = str(expected).strip().lower()
+        texts.sort(key=lambda t: difflib.SequenceMatcher(None, want, t.lower()).ratio(),
+                   reverse=True)
+    return texts[:limit]
 
 
 def logcat_fatal(logcat_text: str) -> Optional[str]:
@@ -74,61 +92,87 @@ def validate(assertion: dict[str, Any], before: Observation, after: Observation,
         # hierarchy first (fast, exact), then OCR (visual text the tree missed)
         if _hierarchy_has_text(after.hierarchy_xml, expected):
             return ValidationOutcome(Status.PASS, models.VALIDATED_HIERARCHY, 1.0,
-                                     detail=f"'{expected}' in hierarchy")
+                                     detail=f"'{expected}' in hierarchy",
+                                     expected=expected, actual=expected)
         found, conf = _ocr(after, expected)
         if found:
             return ValidationOutcome(Status.PASS, models.VALIDATED_OCR, conf,
-                                     detail=f"'{expected}' via OCR")
+                                     detail=f"'{expected}' via OCR",
+                                     expected=expected, actual=expected)
         return ValidationOutcome(Status.FAIL, None, conf,
-                                 detail=f"'{expected}' not in hierarchy or OCR")
+                                 detail=f"'{expected}' not in hierarchy or OCR",
+                                 expected=expected, actual=None,
+                                 observed_texts=_observed_texts(after, expected))
 
     if kind == "ocr_text_exists":
         found, conf = _ocr(after, expected)
         if found:
             return ValidationOutcome(Status.PASS, models.VALIDATED_OCR, conf,
-                                     detail=f"'{expected}' via OCR")
+                                     detail=f"'{expected}' via OCR",
+                                     expected=expected, actual=expected)
         return ValidationOutcome(Status.FAIL, None, conf,
-                                 detail=f"'{expected}' not visible (OCR)")
+                                 detail=f"'{expected}' not visible (OCR)",
+                                 expected=expected, actual=None,
+                                 observed_texts=_observed_texts(after, expected))
 
     if kind == "element_exists":
+        want = str(assertion.get("id") or assertion.get("text")
+                   or assertion.get("desc") or expected or "element")
         if _hierarchy_has_element(after.hierarchy_xml, assertion):
             return ValidationOutcome(Status.PASS, models.VALIDATED_HIERARCHY, 1.0,
-                                     detail="element present in hierarchy")
-        return ValidationOutcome(Status.FAIL, None, None, detail="element absent")
+                                     detail="element present in hierarchy",
+                                     expected=want, actual=want)
+        return ValidationOutcome(Status.FAIL, None, None, detail="element absent",
+                                 expected=want, actual=None,
+                                 observed_texts=_observed_texts(after, want))
 
     if kind == "activity_is":
         if _activity_matches(after.activity, expected):
             return ValidationOutcome(Status.PASS, models.VALIDATED_HIERARCHY, 1.0,
-                                     detail=f"activity == {after.activity}")
+                                     detail=f"activity == {after.activity}",
+                                     expected=expected, actual=after.activity)
         return ValidationOutcome(Status.FAIL, None, None,
-                                 detail=f"activity {after.activity} != {expected}")
+                                 detail=f"activity {after.activity} != {expected}",
+                                 expected=expected, actual=after.activity)
 
     if kind == "screen_changed":
         ratio = change_ratio(before, after)
+        exp = f"screen change ≥ {CHANGE_MIN}"
         if ratio >= CHANGE_MIN:
             return ValidationOutcome(Status.PASS, models.VALIDATED_CHANGE, ratio,
-                                     detail=f"change ratio {ratio:.3f} >= {CHANGE_MIN}")
+                                     detail=f"change ratio {ratio:.3f} >= {CHANGE_MIN}",
+                                     expected=exp, actual=f"ratio {ratio:.3f}")
         return ValidationOutcome(Status.FAIL, models.VALIDATED_CHANGE, ratio,
-                                 detail=f"change ratio {ratio:.3f} < {CHANGE_MIN}")
+                                 detail=f"change ratio {ratio:.3f} < {CHANGE_MIN}",
+                                 expected=exp, actual=f"ratio {ratio:.3f}")
 
     if kind == "not_visible":
         # inverse of text_exists — the string must be gone from tree AND screen
+        exp = f"'{expected}' not visible"
         if _hierarchy_has_text(after.hierarchy_xml, expected):
             return ValidationOutcome(Status.FAIL, models.VALIDATED_HIERARCHY, 1.0,
-                                     detail=f"'{expected}' still in hierarchy")
+                                     detail=f"'{expected}' still in hierarchy",
+                                     expected=exp, actual=f"'{expected}' still visible",
+                                     observed_texts=_observed_texts(after, expected))
         found, conf = _ocr(after, expected)
         if found:
             return ValidationOutcome(Status.FAIL, models.VALIDATED_OCR, conf,
-                                     detail=f"'{expected}' still visible (OCR)")
+                                     detail=f"'{expected}' still visible (OCR)",
+                                     expected=exp, actual=f"'{expected}' still visible",
+                                     observed_texts=_observed_texts(after, expected))
         return ValidationOutcome(Status.PASS, models.VALIDATED_HIERARCHY, 1.0,
-                                 detail=f"'{expected}' not visible")
+                                 detail=f"'{expected}' not visible",
+                                 expected=exp, actual=exp)
 
     if kind == "activity_changed":
+        exp = "activity change"
         if before.activity != after.activity:
             return ValidationOutcome(Status.PASS, models.VALIDATED_HIERARCHY, 1.0,
-                                     detail=f"activity {before.activity} -> {after.activity}")
+                                     detail=f"activity {before.activity} -> {after.activity}",
+                                     expected=exp, actual=f"{before.activity} -> {after.activity}")
         return ValidationOutcome(Status.FAIL, None, None,
-                                 detail=f"activity unchanged ({after.activity})")
+                                 detail=f"activity unchanged ({after.activity})",
+                                 expected=exp, actual=f"unchanged ({after.activity})")
 
     return ValidationOutcome(Status.FAIL, None, None,
                              detail=f"unknown assertion type: {kind}")

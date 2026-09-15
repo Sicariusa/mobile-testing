@@ -24,7 +24,7 @@ from . import validator as validator_mod
 from .device import Device
 from .evidence import Evidence
 from .loader import load_testcase, validate as validate_testcase
-from .models import ActionResult, Status, now_ms
+from .models import ActionResult, FailureReason, Status, now_ms
 from .observation import observe
 from .selector_cache import SelectorCache
 from .screen_library import ScreenLibrary
@@ -134,6 +134,18 @@ def _run_assert(device: Device, assertion: dict[str, Any],
     outcome = validator_mod.validate(assertion, before, after, logcat)
     ocr_matches = _collect_ocr(after, assertion, outcome.validated_by)
 
+    # On a non-PASS, classify and attach structured evidence so the failure is a
+    # readable report, not a bare FAIL. The screen summary is the *post-condition*
+    # observation the assertion evaluated (the failure state), not `before`.
+    failure_reason = None
+    screen_summary = None
+    if outcome.status == Status.CRASH:
+        failure_reason = FailureReason.APP_CRASHED
+    elif outcome.status != Status.PASS:
+        failure_reason = FailureReason.ASSERTION_FAILED
+    if outcome.status != Status.PASS:
+        screen_summary = _screen_summary(after)
+
     return ActionResult(
         status=outcome.status,
         action=f"assert:{assertion.get('type')}",
@@ -146,7 +158,24 @@ def _run_assert(device: Device, assertion: dict[str, Any],
         ocr_matches=ocr_matches,
         detail=outcome.detail,
         crash_signature=outcome.crash_signature,
+        failure_reason=failure_reason,
+        screen_summary=screen_summary,
+        expected=outcome.expected,
+        actual=outcome.actual,
+        observed_texts=list(outcome.observed_texts or []),
     )
+
+
+def _screen_summary(obs) -> Optional[dict[str, Any]]:
+    """{activity, element_count, window} for the observation an assertion checked
+    — the same shape executor._diagnose builds for a blocked action."""
+    if obs is None:
+        return None
+    try:
+        return {"activity": obs.activity, "element_count": len(obs.elements()),
+                "window": obs.window()}
+    except Exception:
+        return {"activity": getattr(obs, "activity", None)}
 
 
 def _collect_ocr(after, assertion, validated_by) -> list[dict[str, Any]]:

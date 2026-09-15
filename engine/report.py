@@ -10,7 +10,7 @@ from __future__ import annotations
 import html
 import json
 import os
-from typing import Any
+from typing import Any, Optional
 
 _STATUS_COLOR = {
     "PASS": "#1f9d55",
@@ -83,6 +83,8 @@ def _step_card(step: dict[str, Any]) -> str:
         sub.append("<span class='err'>crash: " + html.escape(str(step["crash_signature"])) + "</span>")
     sub_line = "<br>".join(sub)
 
+    why_html = _why_block(step)
+
     recovery = step.get("recovery", {}).get("attempts", [])
     recovery_html = ""
     if recovery:
@@ -122,10 +124,54 @@ def _step_card(step: dict[str, Any]) -> str:
         <span class="meta">{meta_line}</span>
       </div>
       <div class="sub">{sub_line}</div>
+      {why_html}
       {recovery_html}
       {ocr_html}
       {thumbs}
     </div>"""
+
+
+# Presentational interpretation of a neutral engine result. The engine records
+# ASSERTION_FAILED ("expected behaviour not observed"); the report *presents* that
+# as a likely defect — it never claims a defect in the engine data itself.
+def _tag_for(status: str, reason: Optional[str]) -> tuple[str, str]:
+    if status == "CRASH":
+        return "App crashed", "#a032c0"
+    if status == "BLOCKED":
+        return "Couldn't reach target", "#c98a1b"
+    if reason == "DEVICE_ERROR":
+        return "Environment / device error", "#c98a1b"
+    if reason == "ASSERTION_FAILED" or status == "FAIL":
+        return "Likely defect", "#d64545"
+    return "Failed", "#8a94a6"
+
+
+def _why_block(step: dict[str, Any]) -> str:
+    status = step.get("status")
+    if status in (None, "PASS", "SKIPPED"):
+        return ""
+    tag, color = _tag_for(str(status), step.get("failure_reason"))
+    rows = ""
+    for label, key in (("Expected", "expected"), ("Actual", "actual")):
+        val = step.get(key)
+        shown = html.escape(str(val)) if val not in (None, "") else "<span class='muted'>—</span>"
+        rows += f"<tr><th>{label}</th><td>{shown}</td></tr>"
+    observed = step.get("observed_texts") or []
+    observed_html = ""
+    if observed:
+        items = ", ".join("“" + html.escape(str(t)) + "”" for t in observed[:8])
+        observed_html = f"<div class='observed'><b>Observed on screen:</b> {items}</div>"
+    scr = step.get("screen_summary") or {}
+    scr_html = ""
+    if scr:
+        win = scr.get("window") or {}
+        scr_html = (f"<div class='scr'>screen: {html.escape(str(scr.get('activity')))} · "
+                    f"{scr.get('element_count', '?')} elements · "
+                    f"dialog={win.get('dialog')} keyboard={win.get('keyboard')}</div>")
+    reason = step.get("failure_reason")
+    reason_html = f"<span class='reason'>{html.escape(str(reason))}</span>" if reason else ""
+    return (f"<div class='why'><span class='tag' style='background:{color}'>{tag}</span> "
+            f"{reason_html}<table>{rows}</table>{observed_html}{scr_html}</div>")
 
 
 _TEMPLATE = """<!doctype html>
@@ -164,6 +210,18 @@ _TEMPLATE = """<!doctype html>
   .thumbs img {{ max-width: 320px; width: 100%; border: 1px solid #d9dee7;
                  border-radius: 6px; background: #fff; }}
   .thumbs figcaption {{ font-size: 11px; color: #8a94a6; text-align: center; margin-top: 4px; }}
+  .why {{ margin-top: 10px; padding: 10px 12px; background: #fbf1f1;
+          border: 1px solid #f0d4d4; border-radius: 8px; }}
+  .why .tag {{ color: #fff; font-weight: 700; font-size: 11px; padding: 2px 9px;
+               border-radius: 6px; }}
+  .why .reason {{ font-family: ui-monospace, Consolas, monospace; font-size: 11px;
+                  color: #8a94a6; margin-left: 8px; }}
+  .why table {{ margin-top: 8px; font-size: 13px; border: none; }}
+  .why th {{ text-align: left; color: #6a7688; padding: 2px 12px 2px 0;
+             font-weight: 600; vertical-align: top; white-space: nowrap; }}
+  .why td {{ padding: 2px 0; }}
+  .why .observed {{ margin-top: 6px; font-size: 12.5px; color: #3a4658; }}
+  .why .scr {{ margin-top: 4px; font-size: 12px; color: #8a94a6; }}
   footer {{ max-width: 960px; margin: 0 auto; padding: 0 16px 40px; }}
   footer details pre {{ background: #10131a; color: #cfd8e3; padding: 14px;
                         border-radius: 8px; overflow: auto; font-size: 12px; }}

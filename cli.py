@@ -343,6 +343,15 @@ def _print_diagnostics(results: list) -> None:
         detail = getattr(r, "detail", "") or getattr(r, "error", "")
         if reason or detail:
             print(f"     reason:  {reason or ''}{' — ' if reason and detail else ''}{detail}")
+        expected = getattr(r, "expected", None)
+        actual = getattr(r, "actual", None)
+        if expected is not None or actual is not None:
+            print(f"     expected: {expected if expected is not None else '—'}")
+            print(f"     actual:   {actual if actual is not None else '—'}")
+        observed = getattr(r, "observed_texts", None) or []
+        if observed:
+            shown = ", ".join(repr(t) for t in observed[:8])
+            print(f"     observed on screen: {shown}")
         summ = getattr(r, "screen_summary", None)
         if summ:
             win = summ.get("window") or {}

@@ -1,0 +1,64 @@
+# Real-defect scenario — SwagLabs `problem_user`.
+#
+# problem_user is a deliberately BROKEN account (buggy add-to-cart / cart / images
+# / checkout). This test asserts the CORRECT behaviour of the add-to-cart flow, so
+# the app's defect makes an assertion FAIL — and the run must then FLAG it as a
+# likely defect (expected/actual/observed + screenshot), NOT a bare BLOCKED.
+#
+# NOTE: which step fails depends on how problem_user misbehaves on this build.
+# Confirm live (probe the flow, watch where it breaks) and, if needed, move the
+# asserted step onto the confirmed broken interaction before treating this as a
+# stable regression check. The engine behaviour under test is the *reporting*: a
+# failed expectation is classified ASSERTION_FAILED with structured evidence.
+name: "Add to cart — problem_user (expects correct behavior; app is buggy)"
+package: com.swaglabsmobileapp
+launch_activity: null
+
+data:
+  username: "problem_user"
+  password: "secret_sauce"
+
+steps:
+  - action: launch
+
+  # --- login (problem_user logs in fine; the bugs are post-login) ---
+  - action: enter_text
+    target: "Username"
+    value: "{{username}}"
+  - action: enter_text
+    target: "Password"
+    value: "{{password}}"
+  - action: submit
+  - assert:
+      type: text_exists
+      value: "PRODUCTS"
+
+  # --- open a product ---
+  - action: tap
+    target: "Sauce Labs Backpack"
+  - assert:
+      type: screen_changed
+
+  # --- add it to the cart (below the fold — engine handles the scroll) ---
+  - action: tap
+    target: "add to cart"
+
+  # feedback that SHOULD appear if the app worked: the button flips to REMOVE and
+  # the cart shows 1. With problem_user this is where a defect typically surfaces —
+  # the assertion FAILS and is flagged with expected=REMOVE + what was observed.
+  - assert:
+      type: text_exists
+      value: "REMOVE"
+  - assert:
+      type: element_exists
+      text: "1"
+
+  # --- the cart should hold the item ---
+  - action: tap
+    target: "cart"
+  - assert:
+      type: text_exists
+      value: "YOUR CART"
+  - assert:
+      type: text_exists
+      value: "Sauce Labs Backpack"

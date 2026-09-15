@@ -53,7 +53,16 @@ VALIDATED_CHANGE = "change"
 
 
 class FailureReason:
-    """Why a step could not complete — a precise alternative to a bare BLOCKED."""
+    """Why a step did not pass — a precise sub-classifier under the Status.
+
+    These are neutral, evidence-level facts, not verdicts about the app. In
+    particular ``ASSERTION_FAILED`` means *the expected behaviour was not
+    observed* — it does not itself prove a software defect (the test, data, or
+    environment could be at fault). The report layer may *present* it as a likely
+    defect; the engine only records what it observed. A distinct infrastructure/
+    ``ERROR`` class (adb dropped, emulator died) is a later addition; today such
+    failures fold into ``DEVICE_ERROR``.
+    """
 
     TARGET_NOT_FOUND = "TARGET_NOT_FOUND"
     TARGET_AMBIGUOUS = "TARGET_AMBIGUOUS"
@@ -61,6 +70,7 @@ class FailureReason:
     TARGET_NOT_CLICKABLE = "TARGET_NOT_CLICKABLE"
     UNEXPECTED_SCREEN = "UNEXPECTED_SCREEN"
     RECOVERY_FAILED = "RECOVERY_FAILED"
+    ASSERTION_FAILED = "ASSERTION_FAILED"   # expected behaviour was not observed
     DEVICE_ERROR = "DEVICE_ERROR"
     APP_CRASHED = "APP_CRASHED"
     TIMEOUT = "TIMEOUT"
@@ -215,6 +225,11 @@ class ActionResult:
     failure_reason: Optional[str] = None
     suggestions: list[dict[str, Any]] = field(default_factory=list)
     screen_summary: Optional[dict[str, Any]] = None
+    # structured assertion evidence (first-class so the report never parses
+    # `detail`): what was expected, what was observed, and the on-screen texts.
+    expected: Optional[str] = None
+    actual: Optional[str] = None
+    observed_texts: list[str] = field(default_factory=list)
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -243,6 +258,9 @@ class ActionResult:
             "failure_reason": self.failure_reason,
             "suggestions": self.suggestions,
             "screen_summary": self.screen_summary,
+            "expected": self.expected,
+            "actual": self.actual,
+            "observed_texts": self.observed_texts,
         }
 
 
