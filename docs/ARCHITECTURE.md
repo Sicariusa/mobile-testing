@@ -75,6 +75,7 @@ above, consuming `Observation` + `ActionResult` and deciding the next step.
 | action didn't happen | [`executor.py`](../engine/executor.py) |
 | wrong PASS/FAIL | [`validator.py`](../engine/validator.py) |
 | runs feel slow | [`device.py`](../engine/device.py) memo, `config.HIERARCHY_CACHE` |
+| auto-crawl misbehaves | [`crawler.py`](../engine/crawler.py) |
 | report looks wrong | [`evidence.py`](../engine/evidence.py) / [`report.py`](../engine/report.py) |
 
 ---
@@ -264,6 +265,28 @@ the panel also shows a thumbnail.
 - **Preflight** (`cli.py --preflight`, `webapp GET /api/preflight`) reads the
   library with **no device** and reports, per target, `✓ found on '<screen>'` or
   `✗ not captured` — a millisecond dry-check before spending a live run.
+- **Checkpoints** — a record can be flagged `is_checkpoint` (a crawl **starting
+  point**), set manually (`set_checkpoint`) or auto-marked by the crawler on the
+  screen it started from.
+
+### Auto-crawl (`engine/crawler.py`)
+
+Bounded, deterministic screen discovery that populates the library — and a good
+illustration of the "one perception, many consumers" design: it **reuses
+`observe()` + `inspect` fingerprints + the `Device` action seam**, adding no new
+perception or action code (`Perception → {Test Runner, Recovery, Auto-Crawler}`).
+The walk: observe → fingerprint → capture if new → tap a safe candidate → observe
+→ recurse into a genuinely new screen → Back to try the next. Safety is by
+construction, not intelligence: `max_screens` (1–5, hard-capped), `max_depth`, a
+tap budget, visited-fingerprint dedup, a **destructive denylist**
+(`CRAWL_DESTRUCTIVE_LABELS` — never taps logout/delete/pay), an **app-scope
+guard** (a tap that leaves the package is undone with Back), and it never taps
+input fields (no typing). Two rules keep it from wandering off: **no Back after a
+non-navigating tap** (that would escape the app at a root screen), and it **stops
+a branch the moment it can't confirm it is back in the app on the expected
+screen** (never taps stale coordinates). With `launch=False` (the panel/CLI
+default) it starts from the screen already open — so a crawl from checkout
+captures the checkout flow, not home. No LLM.
 
 ---
 
@@ -407,9 +430,10 @@ Every tunable in one place — no other module hard-codes a threshold:
 ### CLI (`cli.py`)
 `run` (default), `doctor` (env check), `inspect` (dump the live screen; with
 `--into-library` capture it into the screen library), `screens` (list the
-library), `--preflight` (match a test to the library, no device), `replay`
-(re-print a run's verdicts from `timeline.json`), `--dry-run` (print the step
-plan), and `web` (launch the panel). A non-PASS run prints per-step diagnostics
+library), `crawl` (bounded auto-crawl; `--max-screens`, `--launch`),
+`--preflight` (match a test to the library, no device), `replay` (re-print a
+run's verdicts from `timeline.json`), `--dry-run` (print the step plan), and
+`web` (launch the panel). A non-PASS run prints per-step diagnostics
 (`_print_diagnostics`): the reason, the screen, and the nearest ranked matches.
 
 ### Web control panel (`webapp/`)
@@ -417,9 +441,9 @@ A stdlib `http.server` (`webapp/server.py`) + one static page
 (`webapp/index.html`), no new dependencies. Every endpoint is a thin call into
 the same engine functions the CLI uses — no engine logic is duplicated:
 `GET /api/{env,testcases,screens,reports,avds,apks,preflight}`,
-`POST /api/{inspect,run,emulator,launch,screens/remove,screens/rename}`; report
-and screenshot files are served through path-escape guarded `/reports/` and
-`/screens/` routes.
+`POST /api/{inspect,run,emulator,launch,crawl,screens/remove,screens/rename,
+screens/checkpoint}`; report and screenshot files are served through path-escape
+guarded `/reports/` and `/screens/` routes.
 The panel drives the whole loop from the browser — start/stop the emulator,
 launch an app, capture screens, preflight, install-and-run, read diagnostics and
 reports. See [`WEB_PANEL_GUIDE.md`](WEB_PANEL_GUIDE.md).

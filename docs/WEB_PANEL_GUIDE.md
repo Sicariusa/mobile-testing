@@ -112,6 +112,23 @@ That is the entire workflow with no terminal beyond step 1's `py cli.py web`
 - **Rename / Remove** (per row) — fix a mislabelled capture without another
   device interaction, or delete a bad one. Both act on the record's **immutable
   id**, so they always hit the row you clicked even if two rows share a label.
+- **📍 Set checkpoint** (button) — capture the current screen and mark it as a
+  crawl **starting point**. Per row, **Set 📍 / Unset 📍** toggles the mark; a 📍
+  shows on the label. A checkpoint is just an anchor that says "this is where a
+  crawl begins" — handy for a flow like checkout.
+- **Auto-crawl** — pick **1–5** screens and **Start crawl** to discover screens
+  automatically. It **starts from the screen already open** (drive to checkout,
+  then crawl the checkout flow) unless you tick **launch app first**. It is safe
+  by construction: bounded depth + screen count, skips already-seen screens,
+  **never taps logout / delete / pay** (skips are reported), never types, and
+  backs out if a tap leaves the app. The screen it starts on is auto-marked 📍.
+
+> **Auto-crawl vs manual — both write the same library.** Manual capture is
+> precise (you pick each screen); auto-crawl is fast breadth from a starting
+> point. Because it follows on-screen links, a crawl from checkout may also grab
+> an adjacent screen (e.g. cart) — trim with Remove, or keep `max_screens` small.
+> On a login-gated app it can't get past login (it never types); drive in first,
+> then crawl.
 
 > **Why the thumbnail matters.** Two captures can have the same element count and
 > even different fingerprints yet one be mislabelled — e.g. a `product` row that
@@ -161,6 +178,8 @@ Thin JSON over the same functions the CLI uses (`webapp/server.py`).
 | `POST /api/inspect` | `{label}` → capture current screen | yes |
 | `POST /api/screens/remove` | `{package, id}` → delete a captured record | no |
 | `POST /api/screens/rename` | `{package, id, label}` → relabel a record | no |
+| `POST /api/screens/checkpoint` | `{package, id, value}` → mark/unmark a start point | no |
+| `POST /api/crawl` | `{package, max_screens, launch?}` → bounded auto-crawl | yes |
 | `POST /api/run` | `{test, apk?}` → run; returns counts + diagnostics | yes |
 | `GET /reports/<run>/…` | serve a report file (path-escape guarded) | no |
 | `GET /screens/<pkg>/…` | serve a screenshot thumbnail (path-escape guarded) | no |

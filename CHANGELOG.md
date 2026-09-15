@@ -10,6 +10,25 @@ web control panel. Builds on the perception-first engine below.
 
 ### Added
 
+- **Auto-crawl** (`engine/crawler.py`, new) — bounded, deterministic screen
+  discovery that **reuses the runner's own perception (`observe` + fingerprint)
+  and the `Device` action seam** — not a second engine. Captures up to
+  `max_screens` (1–5, hard-capped) new screens into the library. Safeguards by
+  construction: `max_depth` + total-tap budget, visited-fingerprint dedup, a
+  **destructive denylist** (never taps logout/delete/pay/…; skips are reported),
+  an **app-scope guard** (a tap that leaves the package is undone with Back), and
+  read-only fields (never types). **Starts from the screen already open** by
+  default (`launch=False`) — drive to checkout, crawl the checkout flow — or
+  `launch=True` to relaunch first. Surfaced as `cli.py crawl --package … --max-
+  screens N [--launch]` and `POST /api/crawl`; a panel dropdown (1–5) + "launch
+  app first" checkbox. A root-safe walk (no Back after a non-navigating tap; stop
+  on leaving the app) fixes an escape-to-launcher bug.
+- **Screen checkpoints** — a captured screen can be marked as a crawl **starting
+  point** (`is_checkpoint`). `ScreenLibrary.set_checkpoint(id)`; `add(…,
+  checkpoint=True)`; the crawler auto-marks the screen it started on and returns
+  it as `summary["checkpoint"]`. Panel: a **📍 Set checkpoint** capture button, a
+  per-row Set/Unset 📍 toggle (`POST /api/screens/checkpoint`), and a 📍 marker in
+  the table.
 - **Hierarchy memo** (`engine/device.py`, `engine/config.py`) — the live adapter
   memoizes `dump_hierarchy()`/`current_activity()` within one screen state
   (`config.HIERARCHY_CACHE`, default on). Every mutating action (tap/type/scroll/
