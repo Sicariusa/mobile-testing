@@ -192,6 +192,7 @@ def _element_from_dict(d: dict[str, Any]) -> inspect_mod.Element:
         clickable=bool(d.get("clickable")),
         long_clickable=bool(d.get("long_clickable")),
         checkable=bool(d.get("checkable")),
+        scrollable=bool(d.get("scrollable")),
         editable=bool(d.get("editable")),
         password=bool(d.get("password")),
         focused=bool(d.get("focused")),

@@ -21,9 +21,10 @@ import os
 import time
 from typing import Any, Callable, Optional
 
+from . import recovery
 from .config import (CRAWL_DESTRUCTIVE_LABELS, CRAWL_MAX_DEPTH,
                      CRAWL_MAX_SCREENS_DEFAULT, CRAWL_MAX_SCREENS_LIMIT,
-                     CRAWL_MAX_TAPS)
+                     CRAWL_MAX_SCROLLS_PER_SCREEN, CRAWL_MAX_TAPS)
 from .device import Device
 from .observation import observe
 from .screen_library import ScreenLibrary
@@ -40,6 +41,13 @@ def _tappable(el) -> bool:
     and on-screen (a real center)."""
     return (el.clickable and el.enabled and not el.editable
             and el.center() != (0, 0) and not _is_destructive(el))
+
+
+def _signature(el) -> tuple:
+    """A stable identity for de-duping candidates across scroll positions —
+    reuses the Element fields the resolver relies on (id/class/text/desc) plus
+    the tap center, so two blank-label buttons are not conflated."""
+    return (el.resource_id, el.cls, el.text, el.content_desc, el.center())
 
 
 def crawl(device: Device, package: str, library: ScreenLibrary, *,
@@ -100,13 +108,33 @@ def crawl(device: Device, package: str, library: ScreenLibrary, *,
         obs = _in_app()
         return obs is not None and obs.structural_fingerprint() == expected_fp
 
+    def _note_destructive(obs) -> None:
+        for e in obs.elements():
+            if e.clickable and e.enabled and not e.editable and _is_destructive(e):
+                skipped.add((e.text or e.content_desc or e.resource_id or "").strip())
+
+    def _reveal_scrolled(obs) -> bool:
+        """Scroll to reveal more of the current screen. Returns True if the view
+        actually changed (more may be revealed), False at the bottom / when there
+        is no scrollable container. Compares the *raw* (activity, hierarchy) so a
+        text/bounds-only change still counts — never the text-blind fingerprint."""
+        if not any(e.scrollable for e in obs.elements()):
+            return False
+        before = recovery._screen_signature(device)
+        try:
+            device.scroll_forward()
+        except Exception:
+            return False
+        settle_fn(device)
+        return recovery._screen_signature(device) != before
+
     def _explore(depth: int) -> None:
         if len(captured) >= max_screens or taps["n"] >= CRAWL_MAX_TAPS:
             return
         obs = _in_app()
         if obs is None:                            # not in the app — bail
             return
-        fp = obs.structural_fingerprint()
+        fp = obs.structural_fingerprint()          # entry (top) identity of this screen
         if fp not in visited:
             visited.add(fp)
             _capture(obs, checkpoint=(depth == 0))   # the screen we started on
@@ -115,27 +143,30 @@ def crawl(device: Device, package: str, library: ScreenLibrary, *,
         if depth >= max_depth:
             return
 
-        for e in obs.elements():                   # note destructive controls skipped
-            if e.clickable and e.enabled and not e.editable and _is_destructive(e):
-                skipped.add((e.text or e.content_desc or e.resource_id or "").strip())
-
-        candidates = [e for e in obs.elements() if _tappable(e)]
-        seen_labels: set[str] = set()
-        for el in candidates:
-            if len(captured) >= max_screens or taps["n"] >= CRAWL_MAX_TAPS:
+        # Walk this screen's safe candidates, revealing below-the-fold ones with
+        # bounded scrolls. `tried` (by element signature, not label) prevents
+        # re-tapping the same control across scroll positions and across the
+        # re-scan that follows a child exploration.
+        tried: set[tuple] = set()
+        scrolls = 0
+        while len(captured) < max_screens and taps["n"] < CRAWL_MAX_TAPS:
+            here = _in_app()                        # always tap from a fresh, in-app view
+            if here is None:
                 break
-            label = el.label()
-            if label in seen_labels:
+            _note_destructive(here)
+            cand = next((e for e in here.elements()
+                         if _tappable(e) and _signature(e) not in tried), None)
+            if cand is None:                        # nothing new visible — reveal more?
+                if scrolls >= CRAWL_MAX_SCROLLS_PER_SCREEN or not _reveal_scrolled(here):
+                    break
+                scrolls += 1
                 continue
-            seen_labels.add(label)
 
-            here = _in_app()                        # confirm position before a tap
-            if here is None or here.structural_fingerprint() != fp:
-                break                               # position lost — stop this screen
-
+            tried.add(_signature(cand))
+            pre_fp = here.structural_fingerprint()  # may differ from fp when scrolled
             taps["n"] += 1
             try:
-                device.tap_xy(*el.center())
+                device.tap_xy(*cand.center())       # fresh coords from `here`
             except Exception:
                 continue
             settle_fn(device)
@@ -143,18 +174,20 @@ def crawl(device: Device, package: str, library: ScreenLibrary, *,
             after_fp = after.structural_fingerprint()
 
             if after.package and package and after.package != package:
-                if not _return(fp):                 # left the app — come back
+                if not _return(fp):                 # left the app — come back to entry
                     break
                 continue
-            if after_fp == fp:
-                continue                            # no navigation → NO Back (root-safe)
+            if after_fp == pre_fp:
+                continue                            # tap changed nothing → NO Back (root-safe)
             if after_fp in visited:
                 if not _return(fp):
                     break
                 continue
 
-            _explore(depth + 1)                     # captures the new screen
-            if not _return(fp):                     # return for the next candidate
+            _explore(depth + 1)                     # captures the new screen/state
+            # Return to THIS screen at its entry state; if Back overshoots or
+            # leaves the app, stop — never keep scanning a different screen.
+            if not _return(fp):
                 break
 
     _explore(0)

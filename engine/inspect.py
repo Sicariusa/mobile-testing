@@ -43,6 +43,7 @@ class Element:
     clickable: bool = False
     long_clickable: bool = False
     checkable: bool = False
+    scrollable: bool = False      # a scrollable container (list/scroll view)
     editable: bool = False       # an input field (EditText)
     password: bool = False
     focused: bool = False
@@ -83,6 +84,7 @@ class Element:
             "content_desc": self.content_desc, "cls": self.cls,
             "kind": self.kind(), "clickable": self.clickable,
             "long_clickable": self.long_clickable, "checkable": self.checkable,
+            "scrollable": self.scrollable,
             "editable": self.editable, "password": self.password,
             "focused": self.focused, "enabled": self.enabled,
             "selected": self.selected, "bounds": self.bounds,
@@ -117,6 +119,7 @@ def parse_elements(hierarchy_xml: Optional[str]) -> list[Element]:
                 clickable=_as_bool(node.get("clickable")),
                 long_clickable=_as_bool(node.get("long-clickable")),
                 checkable=_as_bool(node.get("checkable")),
+                scrollable=_as_bool(node.get("scrollable")),
                 editable="EditText" in cls,
                 password=_as_bool(node.get("password")),
                 focused=_as_bool(node.get("focused")),

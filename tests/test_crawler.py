@@ -201,6 +201,135 @@ class RootEscapeDevice:
         pass
 
 
+# --- scroll-aware crawling ---------------------------------------------------
+def _prod_xml(scroll):
+    # A scrollable product screen whose ADD TO CART button is below the fold:
+    # it only appears in the dump once scrolled (scroll >= 1).
+    add = ('<node class="android.widget.Button" text="ADD TO CART" clickable="true" '
+           'enabled="true" bounds="[0,1500][1080,1660]"/>') if scroll >= 1 else ""
+    return f"""<hierarchy>
+      <node class="androidx.core.widget.NestedScrollView" scrollable="true" bounds="[0,0][1080,2000]">
+        <node class="android.widget.TextView" text="Backpack" clickable="false" enabled="true" bounds="[0,100][1080,300]"/>
+        <node class="android.widget.TextView" text="$29.99" clickable="false" enabled="true" bounds="[0,1200][1080,1340]"/>
+        {add}
+      </node>
+    </hierarchy>"""
+
+ADDED = """<hierarchy>
+  <node class="android.widget.FrameLayout" bounds="[0,0][1080,2000]">
+    <node class="android.widget.Button" text="REMOVE" clickable="true" enabled="true" bounds="[0,1500][1080,1660]"/>
+  </node>
+</hierarchy>"""
+
+
+class ScrollProductDevice:
+    """A product screen whose Add-to-cart is revealed only by scrolling; tapping
+    it navigates to an 'added' screen. Tracks scroll calls."""
+    def __init__(self):
+        self.screen, self.scroll, self.scroll_calls = "prod", 0, 0
+
+    def launch(self, p, a=None): self.screen, self.scroll = "prod", 0
+    def current_package(self): return "com.demo"
+    def current_activity(self): return "." + self.screen
+    def dump_hierarchy(self): return _prod_xml(self.scroll) if self.screen == "prod" else ADDED
+    def keyboard_visible(self): return False
+    def screenshot(self, path): return path
+
+    def tap_xy(self, x, y):
+        if self.screen == "prod" and self.scroll >= 1 and (x, y) == (540, 1580):
+            self.screen, self.scroll = "added", 0
+
+    def scroll_forward(self):
+        self.scroll_calls += 1
+        if self.screen == "prod" and self.scroll < 2:
+            self.scroll += 1
+
+    def press_back(self):
+        if self.screen == "added": self.screen, self.scroll = "prod", 0
+    def invalidate(self): pass
+
+
+def test_scroll_reveals_below_fold_control_and_captures_result(tmp_path):
+    dev = ScrollProductDevice()
+    lib = ScreenLibrary("com.demo", base_dir=str(tmp_path))
+    s = crawl(dev, "com.demo", lib, max_screens=3, launch=False, screenshots=False,
+              sleep=lambda *_: None, settle_fn=lambda *a, **k: True)
+    acts = [c["activity"] for c in s["captured"]]
+    # (a) the below-fold Add-to-cart was revealed, tapped, and its screen captured
+    assert ".added" in acts
+    # (c) intermediate scroll positions are NOT captured — only prod + added
+    assert acts.count(".prod") == 1
+    assert s["screens_captured"] == 2
+    assert len({c["fingerprint"] for c in s["captured"]}) == 2
+
+
+class NoChangeScrollDevice:
+    """Scrollable, but scrolling never changes the view (already at the bottom)."""
+    def __init__(self): self.scroll_calls = 0
+    def launch(self, p, a=None): pass
+    def current_package(self): return "com.demo"
+    def current_activity(self): return ".only"
+    def dump_hierarchy(self):
+        return ('<hierarchy><node class="ScrollView" scrollable="true" bounds="[0,0][1080,2000]">'
+                '<node class="TextView" text="static" clickable="false" bounds="[0,0][1080,100]"/>'
+                '</node></hierarchy>')
+    def keyboard_visible(self): return False
+    def screenshot(self, p): return p
+    def tap_xy(self, x, y): pass
+    def scroll_forward(self): self.scroll_calls += 1
+    def press_back(self): pass
+    def invalidate(self): pass
+
+
+def test_scroll_stops_when_view_does_not_change(tmp_path):
+    dev = NoChangeScrollDevice()
+    lib = ScreenLibrary("com.demo", base_dir=str(tmp_path))
+    s = crawl(dev, "com.demo", lib, max_screens=3, launch=False, screenshots=False,
+              sleep=lambda *_: None, settle_fn=lambda *a, **k: True)
+    # (b) it tried one scroll, saw no change, and stopped — no runaway
+    assert dev.scroll_calls == 1
+    assert s["screens_captured"] == 1
+
+
+class NoScrollableDevice:
+    """One screen, a single no-op button, NO scrollable container."""
+    def __init__(self): self.scroll_calls = 0
+    def launch(self, p, a=None): pass
+    def current_package(self): return "com.demo"
+    def current_activity(self): return ".flat"
+    def dump_hierarchy(self):
+        return ('<hierarchy><node class="FrameLayout" bounds="[0,0][1080,2000]">'
+                '<node class="Button" text="Info" clickable="true" enabled="true" bounds="[0,100][1080,300]"/>'
+                '</node></hierarchy>')
+    def keyboard_visible(self): return False
+    def screenshot(self, p): return p
+    def tap_xy(self, x, y): pass
+    def scroll_forward(self): self.scroll_calls += 1
+    def press_back(self): pass
+    def invalidate(self): pass
+
+
+def test_no_scroll_when_no_scrollable_container(tmp_path):
+    dev = NoScrollableDevice()
+    lib = ScreenLibrary("com.demo", base_dir=str(tmp_path))
+    crawl(dev, "com.demo", lib, max_screens=3, launch=False, screenshots=False,
+          sleep=lambda *_: None, settle_fn=lambda *a, **k: True)
+    # (d) never scrolled a screen with no scrollable container
+    assert dev.scroll_calls == 0
+
+
+def test_backtracking_taps_remaining_parent_candidates(tmp_path):
+    # (e) after exploring the first child, the sibling candidate is still tapped.
+    dev = ScriptedDevice()
+    dev.stack = ["catalog"]                 # catalog has Backpack->product and Home->home
+    lib = ScreenLibrary("com.demo", base_dir=str(tmp_path))
+    s = crawl(dev, "com.demo", lib, max_screens=5, launch=False, screenshots=False,
+              sleep=lambda *_: None, settle_fn=lambda *a, **k: True)
+    acts = {c["activity"] for c in s["captured"]}
+    # explored Backpack->product (child 1) AND still went Home->home (sibling)
+    assert ".product" in acts and ".home" in acts
+
+
 def test_crawl_does_not_escape_to_the_launcher(tmp_path):
     dev = RootEscapeDevice()
     lib = ScreenLibrary("com.demo", base_dir=str(tmp_path))

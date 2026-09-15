@@ -59,6 +59,11 @@ CRAWL_MAX_SCREENS_DEFAULT: int = 3   # screens to capture per crawl (UI offers 1
 CRAWL_MAX_SCREENS_LIMIT: int = 5     # hard ceiling regardless of request
 CRAWL_MAX_DEPTH: int = 2             # how many taps deep from the start screen
 CRAWL_MAX_TAPS: int = 40             # total-tap budget, a runaway guard
+# Reveal below-the-fold controls: scroll a screen up to this many times to bring
+# off-screen candidates (e.g. an add-to-cart button under the price) into view.
+# Only scrolls when the screen has a scrollable container and each scroll changes
+# the observable UI (else it has reached the bottom).
+CRAWL_MAX_SCROLLS_PER_SCREEN: int = 4
 # Never tap a control whose label/text/desc/id contains one of these — capturing
 # must never log out, delete, or pay. Skipped controls are reported, not tapped.
 CRAWL_DESTRUCTIVE_LABELS: tuple[str, ...] = (
