@@ -10,16 +10,27 @@ web control panel. Builds on the perception-first engine below.
 
 ### Added
 
-- **Scroll-aware auto-crawl** (`engine/crawler.py`, `engine/inspect.py`) — the
-  crawler now reveals **below-the-fold** controls (e.g. an add-to-cart button
-  under the price) by scrolling a screen up to `CRAWL_MAX_SCROLLS_PER_SCREEN`
-  times when it has a scrollable container and each scroll changes the *observable*
-  UI (raw activity+hierarchy compare, reusing `recovery._screen_signature`). A
-  scroll position is never captured as a screen; candidates are de-duped by a
-  stable element **signature** (id/class/text/desc/center), not by label; and the
-  backtracking invariant is explicit — after exploring a child it returns to the
-  parent (verified in-app on the parent fingerprint) before the next candidate.
-  `Element` gained a `scrollable` flag.
+- **Context-aware, scroll-aware auto-crawl** (`engine/crawler.py`,
+  `engine/inspect.py`) — the crawler no longer taps the first visible control and
+  get "lost" in the app-bar. It now **gathers every candidate on a screen first**
+  (visible *and* below the fold, via bounded reveal-scrolls) and taps **in-content
+  actions before navigation chrome**, using the inspector's element data to
+  classify each (`_priority`/`_looks_nav`: real-text controls beat icon-only
+  app-bar buttons / menu / back / cart-icon). So on a product screen it reaches
+  **add-to-cart** before the hamburger menu. Reveal-scroll only runs when a
+  scrollable container exists (`Element.scrollable`, new) and each scroll changes
+  the *observable* UI (raw activity+hierarchy via `recovery._screen_signature`); a
+  scroll position is never captured as a screen; candidates de-dupe by a
+  scroll-stable element **signature** (id/class/text/desc); and the backtracking
+  invariant is explicit — after exploring a child it returns to the parent
+  (verified in-app on the parent fingerprint) before the next candidate.
+- **Engine harness** (`tools/harness.py`, `tools/perf.py`, `tests/test_performance.py`,
+  new) — `py tools/harness.py` runs correctness + **complexity guards** and prints
+  a report (exits non-zero on failure). Asserts *scaling ratios*, not wall-clock,
+  so they hold on any machine: the hierarchy memo is **O(1)** reads within a screen
+  state (20 reads → 1 dump), `parse_elements` / `rank_candidates` /
+  `structural_fingerprint` are **O(n)**, the crawl's device I/O is **bounded**, and
+  a FakeDevice run passes end to end. The same checks run in the test suite.
 - **Failure classification & structured evidence** — a failed assertion is now a
   readable **defect report**, not a bare FAIL. `FailureReason.ASSERTION_FAILED`
   ("expected behaviour not observed" — a *neutral* engine fact); the validator

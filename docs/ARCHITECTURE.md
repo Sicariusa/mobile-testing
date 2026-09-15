@@ -288,17 +288,32 @@ screen** (never taps stale coordinates). With `launch=False` (the panel/CLI
 default) it starts from the screen already open — so a crawl from checkout
 captures the checkout flow, not home. No LLM.
 
-**Scroll-aware discovery.** Candidates are gathered across the current view *and*
-bounded reveal-scrolls (`CRAWL_MAX_SCROLLS_PER_SCREEN`), so a below-the-fold
-control (add-to-cart under the price) is revealed and tapped. It scrolls only when
-the screen has a scrollable container (`Element.scrollable`) and each scroll
-changes the *observable* UI — a raw `(activity, hierarchy)` compare via
-`recovery._screen_signature` (sensitive to text/bounds, unlike the text-blind
-fingerprint), stopping at the bottom. A scroll position is never captured as a
-screen; candidates de-dupe by a stable **element signature**
-(id/class/text/desc/center), not by label, so blank-label buttons aren't
-conflated. The **backtracking invariant**: after exploring a child it returns to
+**Context-aware, scroll-aware discovery.** On each screen the crawler first
+**gathers every candidate** — visible *and* below the fold, via bounded
+reveal-scrolls (`CRAWL_MAX_SCROLLS_PER_SCREEN`) — then taps **in-content actions
+before navigation chrome**, so it doesn't get "lost" tapping the app-bar. The
+ordering uses the inspector's element data (`_priority` / `_looks_nav`): a control
+with real text (e.g. "ADD TO CART") outranks an icon-only app-bar button / menu /
+back / cart-icon. Reveal-scroll runs only when a scrollable container exists
+(`Element.scrollable`) and each scroll changes the *observable* UI — a raw
+`(activity, hierarchy)` compare via `recovery._screen_signature` (sensitive to
+text/bounds, unlike the text-blind fingerprint), stopping at the bottom. A scroll
+position is never captured as a screen; candidates de-dupe and re-find by a
+**scroll-stable signature** (id/class/text/desc — not coordinates, which move when
+scrolled). The **backtracking invariant**: after exploring a child it returns to
 the parent (verified in-app on the parent fingerprint) before the next candidate.
+
+### Performance & the harness (`tools/`)
+
+`py tools/harness.py` is the one-command answer to "is the engine correct *and*
+fast?" — it runs correctness plus **complexity guards** and exits non-zero on
+failure (the same checks are in `tests/test_performance.py`). They assert scaling
+*ratios*, never wall-clock, so they hold on any machine. What they lock in:
+the hierarchy memo makes reads **O(1)** within a screen state (the "one snapshot"
+invariant — 20 reads → 1 dump); `parse_elements`, `rank_candidates` and
+`structural_fingerprint` are **O(n)** in on-screen nodes; the crawl's device I/O
+is **bounded** by its screen/tap budget; and a full FakeDevice run passes end to
+end. The runner hot path stays O(n)-resolve over O(1)-memoized reads.
 
 ---
 
