@@ -446,6 +446,15 @@ py cli.py screens --package <package>                # list the library
 Bundles land in `screens\<package>\` and the library index in
 `screens\<package>\library.json` (keyed by each screen's structural fingerprint).
 
+> **The label you pick is cosmetic.** Matching is by `structural_fingerprint`
+> = `sha1(activity + sorted id:class:desc)` — the app's real runtime activity and
+> element structure, captured live — never by the name you type. Call a screen
+> `products` while the developer's activity is `CatalogActivity`: zero effect.
+> Likewise test `target:`s match on-screen **text / desc / id**, not screen names.
+> (Proof: SwagLabs' `login` / `catalog` / `product` all report
+> `activity=.MainActivity` yet match correctly via distinct fingerprints.) The
+> only thing that must mirror the app is the **visible text/id** in your steps.
+
 **Preflight — match a test to the library (no device).** Before a live run, see
 which targets are already known and which will be resolved live:
 
@@ -460,16 +469,43 @@ screen`; exit `0` when all are known.
 `failure_reason`, the screen it was on, and the nearest ranked on-screen matches
 — the same data that is in `timeline.json`, surfaced in the terminal.
 
-**Web control panel.** A local page over the engine — env/device status, capture
-screens, run any test, open reports inline:
+**Web control panel — do everything from the browser.** A local page over the
+engine. Start it once:
 
 ```powershell
 py cli.py web                 # → http://localhost:8765  (Ctrl+C to stop)
 ```
 
-Read-only panels work with no device; capture/run need one connected. It is a
-stdlib server (`webapp/server.py`) + a static page (`webapp/index.html`), so
-there are no new dependencies.
+…or just **double-click `start-web.bat`** — it starts the server and opens the
+page. From the panel, with no further terminal:
+
+| Panel | You can |
+| --- | --- |
+| Environment | see tool/device readiness; **pick an AVD → Start / Stop the emulator** (device pill turns green when it boots) |
+| Screens | type a package → **Launch app** to its home screen, drive it, name the screen → **Capture** into the library; **Load** to list |
+| Test cases | optionally **pick an APK to install before a run**; **Preflight** a test (targets vs library, no device); **Run** it |
+| Reports | open any run's `report.html` inline; a non-PASS **Run prints per-step diagnostics right in the panel** |
+
+The only manual step left is *driving the app between captures* — a human decides
+which screens matter. Read-only panels (env, list, preflight, reports) work with
+no device; start-emulator, launch, capture and run need one. It is a stdlib
+server (`webapp/server.py`) + one static page (`webapp/index.html`) — no new
+dependencies. Endpoints: `GET /api/{env,testcases,screens,reports,avds,apks,
+preflight}`, `POST /api/{inspect,run,emulator,launch}`; report serving is
+path-escape guarded.
+
+> **Full step-by-step walkthrough:** [`WEB_PANEL_GUIDE.md`](WEB_PANEL_GUIDE.md) —
+> starting the panel, every feature, the whole loop from zero, an endpoint
+> reference, and troubleshooting.
+
+**Validated live (SwagLabs on the `qa_test` emulator).** `sauce.yaml`,
+`sauce_negative.yaml`, `sauce_vague.yaml` → **PASS 6/6** each;
+`sauce_add_to_cart.yaml` → **PASS 14/14** — the flow that was `BLOCKED` before
+this round (non-clickable product title + off-screen add-to-cart), now resolved
+by clickable-ancestor promotion and directed scroll. `login` / `catalog` /
+`product` captured into the library; `--preflight` matched **all 4** targets with
+no device ("All targets known."); the web panel served env, library, tests, and
+reports (path-traversal → 404). 86 unit tests green.
 
 ---
 

@@ -261,24 +261,38 @@ py cli.py --preflight --test testcases\flow.yaml   # match a test's targets to c
 (text-independent), stored in <code>screens/&lt;pkg&gt;/library.json</code>.
 Preflight prints, per targeted step, <code class="ok">✓ found on '&lt;screen&gt;'</code>
 or <code class="bad">✗ not captured</code> — so you know before a live run.</p>
+<p class="muted"><strong>The label you type is cosmetic.</strong> Matching is by
+<code>structural_fingerprint = sha1(activity + sorted id:class:desc)</code> — the
+app's real runtime activity and element structure — never by your name. Call a
+screen <code>products</code> while the developer's activity is
+<code>CatalogActivity</code>: no effect. (Proof: SwagLabs' <code>login</code> /
+<code>catalog</code> / <code>product</code> all report <code>.MainActivity</code>
+yet match via distinct fingerprints.) Only the <em>visible text/id</em> in a
+<code>target:</code> must mirror the app.</p>
 <p class="muted">A non-PASS run also prints per-step diagnostics
 (<code>failure_reason</code>, the screen, and the nearest ranked matches) in the
 terminal — see <code>cli._print_diagnostics</code>.</p>
 
-<h2 id="webapp">★ Web control panel</h2>
+<h2 id="webapp">★ Web control panel — do everything from the browser</h2>
 <p>A local page over the engine — no new dependencies (Python stdlib
-<code>http.server</code> + one static HTML file).</p>
-<pre><code>py cli.py web                 # → http://localhost:8765</code></pre>
+<code>http.server</code> + one static HTML file). Start it once, then the whole
+loop is browser-driven; the only manual step left is deciding which screens to
+capture.</p>
+<pre><code>py cli.py web                 # → http://localhost:8765
+# …or double-click start-web.bat (starts the server and opens the page)</code></pre>
 <table>
 <tr><th>Panel</th><th>Does</th><th>Needs a device?</th></tr>
-<tr><td>Environment</td><td>tool + device readiness (wraps <code>--check-env</code>)</td><td>no</td></tr>
-<tr><td>Screens</td><td>capture the current screen into the library; list it</td><td>capture: yes</td></tr>
-<tr><td>Test cases</td><td>list <code>testcases/*.yaml</code>; Run one</td><td>run: yes</td></tr>
-<tr><td>Reports</td><td>list past runs; open a <code>report.html</code> inline</td><td>no</td></tr>
+<tr><td>Environment</td><td>tool + device readiness (wraps <code>--check-env</code>); <strong>pick an AVD → Start / Stop the emulator</strong></td><td>start: no</td></tr>
+<tr><td>Screens</td><td><strong>Launch app</strong> to its home screen; capture the current screen into the library; list it</td><td>launch/capture: yes</td></tr>
+<tr><td>Test cases</td><td>optional <strong>install-APK-before-run</strong> picker; <strong>Preflight</strong> (targets vs library, no device); Run</td><td>run: yes</td></tr>
+<tr><td>Reports</td><td>list past runs; open a <code>report.html</code> inline; <strong>per-step diagnostics inline</strong> after a non-PASS run</td><td>no</td></tr>
 </table>
 <p class="muted"><code>webapp/server.py</code> exposes thin JSON endpoints over the
-same engine functions the CLI uses; report file serving is path-escape guarded.
-More options slot in behind the same seam without touching the engine.</p>
+same engine functions the CLI uses —
+<code>GET /api/{env,testcases,screens,reports,avds,apks,preflight}</code>,
+<code>POST /api/{inspect,run,emulator,launch}</code>; report file serving is
+path-escape guarded. More options slot in behind the same seam without touching
+the engine.</p>
 
 <h2 id="req">2 · Requirements</h2>
 <table>

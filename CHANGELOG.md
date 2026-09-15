@@ -29,6 +29,14 @@ web control panel. Builds on the perception-first engine below.
   `http.server` exposing `env / testcases / screens / reports / inspect / run`;
   a static dark-theme page to capture screens, run tests, and open reports
   inline. Report file serving is path-escape guarded.
+- **Full self-serve panel** (follow-up) — the panel now drives the whole loop
+  with no terminal beyond starting the server: **start/stop the emulator**
+  (`POST /api/emulator`, AVD picker from `GET /api/avds`), **launch an app** to
+  its home screen for capture (`POST /api/launch`), **preflight** a test against
+  the library (`GET /api/preflight`), **install an APK before a run** (picker
+  from `GET /api/apks`), and **per-step diagnostics inline** after a non-PASS run
+  (the same data as the terminal). `start-web.bat` boots the server and opens the
+  page in one double-click. Full walkthrough in `docs/WEB_PANEL_GUIDE.md`.
 - **Run diagnostics** (`cli.py`) — a non-PASS run now prints each blocked/failed
   step's `failure_reason`, the screen it was on, and the nearest ranked on-screen
   matches (was only in `timeline.json`).
@@ -43,6 +51,24 @@ web control panel. Builds on the perception-first engine below.
   `engine/runner.py` thread the `ScreenLibrary` through; recovery records a
   bearing when the library knows an off-screen target; resolver records
   `role_rejected` candidates for clearer diagnostics.
+
+### Validated
+
+- **86 unit tests green** (`test_device_cache`, `test_screen_library`,
+  `test_webapp` added).
+- **Live on the `qa_test` emulator (SwagLabs, `com.swaglabsmobileapp`):**
+  - `sauce.yaml` **PASS 6/6**, `sauce_negative.yaml` **PASS 6/6**,
+    `sauce_vague.yaml` **PASS 6/6**.
+  - `sauce_add_to_cart.yaml` **PASS 14/14** — the flow that was `BLOCKED`
+    before this round (product title non-clickable + add-to-cart off-screen);
+    now resolved by clickable-ancestor promotion and directed scroll.
+- **Screen library** captured by driving the app: `login`, `catalog`, `product`
+  (3 entries, distinct structural fingerprints under one `.MainActivity`, proving
+  match is by fingerprint not by label). `screens` lists them; `--preflight`
+  matched **all 4** `sauce_add_to_cart` targets to captured screens with **no
+  device**, including the off-screen `add to cart` bearing — "All targets known."
+- **Web panel** (`web --port 8765`): env, live screen-library table, 9 test
+  cases, inline reports all served; report path-traversal returns 404.
 
 ## [Unreleased] — Perception-first engine (Phases 1–6)
 
