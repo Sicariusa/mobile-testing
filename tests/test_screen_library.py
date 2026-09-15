@@ -103,6 +103,21 @@ def test_legacy_entry_without_id_is_migrated(tmp_path):
     assert lib2.screens()[0]["id"] == same_id
 
 
+def test_checkpoint_flag_set_toggle_and_preserved(tmp_path):
+    lib = ScreenLibrary("com.example.shop", base_dir=str(tmp_path))
+    a = lib.add(_obs(".A", CATALOG_XML), "start", checkpoint=True)
+    assert a["is_checkpoint"] is True
+    b = lib.add(_obs(".B", CATALOG_XML.replace("Backpack", "X")), "other")
+    assert b["is_checkpoint"] is False
+    # toggle by id
+    assert lib.set_checkpoint(b["id"], True) is True
+    assert lib.get(b["id"])["is_checkpoint"] is True
+    assert lib.set_checkpoint("scr_nope", True) is False
+    # re-capturing a checkpoint label keeps the flag
+    a2 = lib.add(_obs(".A", CATALOG_XML), "start")
+    assert a2["is_checkpoint"] is True
+
+
 def test_duplicates_flags_shared_fingerprints_only(tmp_path):
     lib = ScreenLibrary("com.example.shop", base_dir=str(tmp_path))
     lib.add(_obs(".Same", CATALOG_XML), "one")

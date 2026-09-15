@@ -70,8 +70,21 @@
     <div class="row">
       <input id="caplabel" placeholder="label (e.g. catalog)">
       <button class="primary" onclick="capture()">Capture current screen</button>
+      <button onclick="capture(true)" title="capture the current screen and mark it as a crawl starting point">📍 Set checkpoint</button>
       <span id="capstatus" class="muted"></span>
     </div>
+    <div class="row">
+      <span class="muted">or auto-crawl</span>
+      <select id="crawln" title="screens to discover">
+        <option>1</option><option>2</option><option selected>3</option>
+        <option>4</option><option>5</option>
+      </select>
+      <button onclick="autoCrawl()" title="discover screens automatically from the current screen (safe: never taps logout/delete/pay)">Start crawl</button>
+      <label class="mono" title="off = crawl from the screen currently open (e.g. checkout); on = relaunch the app first">
+        <input type="checkbox" id="crawllaunch"> launch app first
+      </label>
+    </div>
+    <div class="mono muted">crawl starts from the screen open now — drive to checkout, then crawl the checkout flow</div>
     <div id="screens" class="muted">Drive the app to a screen, name it, and Capture.</div>
   </div>
 
@@ -178,29 +191,57 @@ async function loadScreens(){
     $("#screens").innerHTML = `<table><thead><tr><th></th><th>Label</th><th>Activity</th><th>Fingerprint</th><th>Elems</th><th>Tap</th><th>Fld</th><th></th></tr></thead><tbody>`+
       s.screens.map(x=>{
         const dup = (x.duplicate_of||[]).length ? ` <span class="warn" title="same fingerprint as another capture">⚠ dup</span>` : "";
+        const flag = x.is_checkpoint ? ` <span title="crawl starting point">📍</span>` : "";
         const thumb = x.screenshot ? `<a href="${x.screenshot}" target="_blank"><img class="thumb" src="${x.screenshot}" alt=""></a>` : `<span class="muted">—</span>`;
+        const cpBtn = x.is_checkpoint
+          ? `<button class="mini" onclick="setCheckpoint('${x.id}',false)" title="remove start-point mark">Unset 📍</button>`
+          : `<button class="mini" onclick="setCheckpoint('${x.id}',true)" title="mark as a crawl starting point">Set 📍</button>`;
         return `<tr>
           <td>${thumb}</td>
-          <td>${esc(x.label)}${dup}<div class="mono" title="${x.captured_at||''}">${(x.captured_at||'').replace('T',' ')}</div></td>
+          <td>${esc(x.label)}${flag}${dup}<div class="mono" title="${x.captured_at||''}">${(x.captured_at||'').replace('T',' ')}</div></td>
           <td class="muted">${esc(x.activity||'')}</td>
           <td class="mono">${(x.fingerprint||'').slice(0,8)}</td>
           <td>${x.elements}</td><td>${x.tappable}</td><td>${x.fields}</td>
           <td class="acts">
+            ${cpBtn}
             <button class="mini" onclick="renameScreen('${x.id}','${esc(x.label)}')">Rename</button>
             <button class="mini" onclick="removeScreen('${x.id}','${esc(x.label)}')">Remove</button>
           </td></tr>`;
       }).join("")+`</tbody></table>`;
   }catch(err){ $("#screens").innerHTML = `<span class="bad">${err.message}</span>`; }
 }
-async function capture(){
-  const label = $("#caplabel").value.trim()||"screen";
-  $("#capstatus").innerHTML = `capturing '${esc(label)}' …`;
+async function capture(checkpoint){
+  const label = $("#caplabel").value.trim() || (checkpoint?"checkpoint":"screen");
+  $("#capstatus").innerHTML = `${checkpoint?"setting checkpoint":"capturing"} '${esc(label)}' …`;
   try{
-    const r = await api("/api/inspect",{method:"POST",headers:{'Content-Type':'application/json'},body:JSON.stringify({label})});
-    $("#capstatus").innerHTML = `<span class="ok">captured '${esc(r.label)}' · ${r.activity} · ${r.elements} el · ${r.screens} in library</span>`;
-    log(`captured '${r.label}' — ${r.package} · ${r.activity} · ${r.elements} elements · lib now ${r.screens}`,"ok");
+    const r = await api("/api/inspect",{method:"POST",headers:{'Content-Type':'application/json'},body:JSON.stringify({label,checkpoint:!!checkpoint})});
+    const mark = r.is_checkpoint?" 📍":"";
+    $("#capstatus").innerHTML = `<span class="ok">captured '${esc(r.label)}'${mark} · ${r.activity} · ${r.elements} el · ${r.screens} in library</span>`;
+    log(`captured '${r.label}'${mark} — ${r.package} · ${r.activity} · ${r.elements} elements · lib now ${r.screens}`,"ok");
     $("#pkg").value = r.package; loadScreens();
   }catch(err){ $("#capstatus").innerHTML = `<span class="bad">capture failed: ${esc(err.message)}</span>`; log("capture failed: "+err.message,"bad"); }
+}
+async function setCheckpoint(id, value){
+  const pkg = $("#pkg").value.trim();
+  try{
+    await api("/api/screens/checkpoint",{method:"POST",headers:{'Content-Type':'application/json'},body:JSON.stringify({package:pkg,id,value})});
+    log(value?`marked start point 📍`:`cleared start point`,"ok"); loadScreens();
+  }catch(err){ log("checkpoint failed: "+err.message,"bad"); }
+}
+async function autoCrawl(){
+  const pkg = $("#pkg").value.trim(); if(!pkg){ log("enter a package first","warn"); return; }
+  const n = parseInt($("#crawln").value,10)||3;
+  const launch = $("#crawllaunch").checked;
+  $("#capstatus").innerHTML = `crawling up to ${n} screen(s) … (${launch?"launches the app":"from the current screen"}, taps safe controls)`;
+  try{
+    const r = await api("/api/crawl",{method:"POST",headers:{'Content-Type':'application/json'},body:JSON.stringify({package:pkg,max_screens:n,launch})});
+    const names = (r.captured||[]).map(c=>c.label+(c.is_checkpoint?" 📍":"")).join(", ");
+    const cp = r.checkpoint ? ` · start 📍 ${r.checkpoint.activity||r.checkpoint.label}` : "";
+    $("#capstatus").innerHTML = `<span class="ok">crawl done · ${r.screens_captured} captured (${names}) · ${r.taps} taps${cp}</span>`;
+    log(`crawl ${pkg} → ${r.screens_captured} screen(s) in ${r.taps} taps; visited ${r.screens_visited}${cp}`,"ok");
+    if((r.skipped_destructive||[]).length) log(`  skipped destructive: ${r.skipped_destructive.join(", ")}`,"warn");
+    loadScreens();
+  }catch(err){ $("#capstatus").innerHTML = `<span class="bad">crawl failed: ${esc(err.message)}</span>`; log("crawl failed: "+err.message,"bad"); }
 }
 async function removeScreen(id, label){
   if(!confirm(`Remove captured screen '${label}'? This cannot be undone.`)) return;

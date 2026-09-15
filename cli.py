@@ -188,6 +188,49 @@ def cmd_web(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_crawl(args: argparse.Namespace) -> int:
+    """Bounded auto-crawl: discover up to --max-screens screens from the app's
+    start and capture each into the screen library (reuses the runner's
+    perception + Device seam; never taps destructive controls)."""
+    from engine.screen_library import ScreenLibrary
+    from engine.crawler import crawl
+
+    package = args.package
+    if not package and args.apk:
+        try:
+            package = device_mod.read_apk_metadata(args.apk).get("package")
+        except Exception:
+            package = None
+    if not package:
+        print("error: pass --package <name> (or --apk to read it).", file=sys.stderr)
+        return 2
+    try:
+        dev = device_mod.connect(serial=args.serial)
+    except device_mod.DeviceError as exc:
+        print(f"Device error: {exc}", file=sys.stderr)
+        return 3
+    if args.apk:
+        try:
+            dev.install(args.apk)
+        except device_mod.DeviceError as exc:
+            print(f"APK install failed: {exc}", file=sys.stderr)
+
+    lib = ScreenLibrary(package)
+    summary = crawl(dev, package, lib, max_screens=int(args.max_screens),
+                    launch=bool(args.launch))
+    start = "app start (launched)" if args.launch else "current screen"
+    print(f"Auto-crawl — {package}  (max {summary['max_screens']} screens, from {start})")
+    for c in summary["captured"]:
+        print(f"  • {c['label']:10} id={c['id']}  activity={c.get('activity')}"
+              f"  fp={c.get('fingerprint')}")
+    print(f"\nCaptured {summary['screens_captured']} screen(s) in "
+          f"{summary['taps']} tap(s); visited {summary['screens_visited']}.")
+    if summary["skipped_destructive"]:
+        print("Skipped destructive controls: "
+              + ", ".join(summary["skipped_destructive"]))
+    return 0
+
+
 def cmd_preflight(args: argparse.Namespace) -> int:
     """Match a test case's targets against the captured screen library, so you
     know before a live run which targets are already known and which aren't."""
@@ -341,7 +384,9 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--label", default="screen",
                    help="Name for the inspected screen's folder (default: screen).")
     p.add_argument("--launch", action="store_true",
-                   help="With --inspect + --apk: install and launch before scanning.")
+                   help="With --inspect + --apk: install and launch before "
+                        "scanning. With crawl: launch the app to its start first "
+                        "(default: crawl from the current screen).")
     p.add_argument("--screens-dir", default="screens",
                    help="Where --inspect writes screen bundles (default: screens).")
     p.add_argument("--from-report",
@@ -356,13 +401,16 @@ def build_parser() -> argparse.ArgumentParser:
                         "(no device); reports which are known before a live run.")
     p.add_argument("--port", default=8765,
                    help="Port for the web control panel (default: 8765).")
+    p.add_argument("--max-screens", default=3,
+                   help="Auto-crawl: max screens to capture, 1..5 (default: 3).")
     return p
 
 
 def main(argv: list[str] | None = None) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
     command = None
-    if argv and argv[0] in ("inspect", "run", "doctor", "replay", "screens", "web"):
+    if argv and argv[0] in ("inspect", "run", "doctor", "replay", "screens",
+                            "web", "crawl"):
         command = argv.pop(0)
     args = build_parser().parse_args(argv)
     if command == "doctor" or args.check_env:
@@ -373,6 +421,8 @@ def main(argv: list[str] | None = None) -> int:
         return cmd_replay(args)
     if command == "screens":
         return cmd_screens(args)
+    if command == "crawl":
+        return cmd_crawl(args)
     if command == "inspect" or args.inspect:
         return cmd_inspect(args)
     if args.preflight:

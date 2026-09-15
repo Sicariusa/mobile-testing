@@ -101,6 +101,9 @@ def test_screen_remove_and_rename_endpoints_are_wired():
         code, ren = _post(base, "/api/screens/rename",
                           {"package": "does.not.exist", "id": "scr_nope", "label": "x"})
         assert code == 200 and ren["renamed"] is False
+        code, cp = _post(base, "/api/screens/checkpoint",
+                        {"package": "does.not.exist", "id": "scr_nope", "value": True})
+        assert code == 200 and cp["ok"] is False
     finally:
         httpd.shutdown()
 

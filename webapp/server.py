@@ -79,6 +79,7 @@ def _screens(package: str) -> dict[str, Any]:
         rows.append({"id": s.get("id"), "label": s["label"],
                      "activity": s.get("activity"), "package": s.get("package"),
                      "fingerprint": fp, "captured_at": s.get("captured_at"),
+                     "is_checkpoint": bool(s.get("is_checkpoint")),
                      "elements": len(els),
                      "tappable": sum(1 for e in els if e.get("clickable")),
                      "fields": sum(1 for e in els if e.get("editable")),
@@ -96,18 +97,20 @@ def _shot_url(path: str | None) -> str | None:
     return "/" + rel if rel.startswith("screens/") else None
 
 
-def _capture(label: str, serial: str | None) -> dict[str, Any]:
+def _capture(label: str, serial: str | None,
+             checkpoint: bool = False) -> dict[str, Any]:
     """Drive-capture the current screen into the library (needs a device).
 
     The screenshot is stored under ``screens/<pkg>/shots/<id>.png`` — named by
     the record's immutable id, so a re-capture or rename never orphans it.
+    ``checkpoint`` marks it as a crawl starting point.
     """
     from engine.observation import observe
     from engine.screen_library import ScreenLibrary
     dev = device_mod.connect(serial=serial or None)
     obs = observe(dev)  # element inventory now; screenshot once we know the id
     lib = ScreenLibrary(obs.package or "app")
-    record = lib.add(obs, label)
+    record = lib.add(obs, label, checkpoint=checkpoint)
     shots_dir = os.path.join(lib.dir, "shots")
     os.makedirs(shots_dir, exist_ok=True)
     shot_abs = os.path.join(shots_dir, f"{record['id']}.png")
@@ -119,7 +122,26 @@ def _capture(label: str, serial: str | None) -> dict[str, Any]:
     lib.save()
     return {"id": record["id"], "label": label, "package": obs.package,
             "activity": obs.activity, "fingerprint": obs.structural_fingerprint(),
+            "is_checkpoint": record.get("is_checkpoint", False),
             "elements": len(obs.elements()), "screens": len(lib.screens())}
+
+
+def _crawl(package: str, max_screens: int, serial: str | None,
+           launch: bool = False) -> dict[str, Any]:
+    """Bounded auto-crawl (needs a device). Default starts from the screen that
+    is already open (drive to checkout, then crawl the checkout flow);
+    ``launch=True`` relaunches the app first. Reuses engine.crawler — no logic
+    duplicated here."""
+    from engine.crawler import crawl
+    from engine.screen_library import ScreenLibrary
+    dev = device_mod.connect(serial=serial or None)
+    lib = ScreenLibrary(package)
+    summary = crawl(dev, package, lib, max_screens=int(max_screens),
+                    launch=bool(launch))
+    for c in summary.get("captured", []):
+        c["screenshot"] = _shot_url(c.get("screenshot"))
+    summary["screens"] = len(lib.screens())
+    return summary
 
 
 def _remove_screen(package: str, screen_id: str) -> dict[str, Any]:
@@ -138,6 +160,15 @@ def _rename_screen(package: str, screen_id: str, label: str) -> dict[str, Any]:
     if ok:
         lib.save()
     return {"renamed": ok, "id": screen_id, "label": label}
+
+
+def _checkpoint_screen(package: str, screen_id: str, value: bool) -> dict[str, Any]:
+    from engine.screen_library import ScreenLibrary
+    lib = ScreenLibrary(package)
+    ok = lib.set_checkpoint(screen_id, value)
+    if ok:
+        lib.save()
+    return {"ok": ok, "id": screen_id, "is_checkpoint": value}
 
 
 def _run(test: str, apk: str | None, serial: str | None) -> dict[str, Any]:
@@ -330,7 +361,8 @@ class Handler(BaseHTTPRequestHandler):
         try:
             if self.path == "/api/inspect":
                 return self._json(_capture(payload.get("label", "screen"),
-                                           payload.get("serial")))
+                                           payload.get("serial"),
+                                           bool(payload.get("checkpoint", False))))
             if self.path == "/api/run":
                 return self._json(_run(payload["test"], payload.get("apk"),
                                        payload.get("serial")))
@@ -344,6 +376,15 @@ class Handler(BaseHTTPRequestHandler):
             if self.path == "/api/screens/rename":
                 return self._json(_rename_screen(payload["package"], payload["id"],
                                                  payload["label"]))
+            if self.path == "/api/screens/checkpoint":
+                return self._json(_checkpoint_screen(payload["package"],
+                                                     payload["id"],
+                                                     bool(payload.get("value", True))))
+            if self.path == "/api/crawl":
+                return self._json(_crawl(payload["package"],
+                                         payload.get("max_screens", 3),
+                                         payload.get("serial"),
+                                         bool(payload.get("launch", False))))
             return self._json({"error": "not found"}, 404)
         except KeyError as exc:
             return self._json({"error": f"missing field {exc}"}, 400)

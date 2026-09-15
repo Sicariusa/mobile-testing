@@ -52,6 +52,21 @@ RESOLVER_MAX_SCROLLS: int = 3        # find_with_scroll bound
 RESOLVE_MIN_SCORE: float = 0.60      # min candidate score to accept a ranked match
 RESOLVE_AMBIGUOUS_GAP: float = 0.10  # top two within this margin => AMBIGUOUS
 
+# --- Auto-crawl (bounded screen discovery) -----------------------------------
+# The crawler reuses the same perception (observe + fingerprint) and the Device
+# action seam as the runner — it is NOT a second engine. All bounds live here.
+CRAWL_MAX_SCREENS_DEFAULT: int = 3   # screens to capture per crawl (UI offers 1..5)
+CRAWL_MAX_SCREENS_LIMIT: int = 5     # hard ceiling regardless of request
+CRAWL_MAX_DEPTH: int = 2             # how many taps deep from the start screen
+CRAWL_MAX_TAPS: int = 40             # total-tap budget, a runaway guard
+# Never tap a control whose label/text/desc/id contains one of these — capturing
+# must never log out, delete, or pay. Skipped controls are reported, not tapped.
+CRAWL_DESTRUCTIVE_LABELS: tuple[str, ...] = (
+    "logout", "log out", "sign out", "signout", "delete", "remove", "purchase",
+    "buy", "pay", "checkout", "order", "uninstall", "clear", "reset", "deactivate",
+    "close account", "unsubscribe",
+)
+
 # --- Evidence / report -------------------------------------------------------
 THUMBNAIL_MAX_WIDTH: int = 320       # px width of before/after thumbnails in the report
 

@@ -66,16 +66,21 @@ class ScreenLibrary:
             if "captured_at" not in rec:
                 rec["captured_at"] = ""
                 changed = True
+            if "is_checkpoint" not in rec:
+                rec["is_checkpoint"] = False
+                changed = True
         return changed
 
     # -- capture -------------------------------------------------------------
     def add(self, observation, label: str, *,
-            screenshot: Optional[str] = None) -> dict[str, Any]:
+            screenshot: Optional[str] = None,
+            checkpoint: bool = False) -> dict[str, Any]:
         """Capture ``observation`` as the screen ``label``.
 
         Re-capturing an existing label updates that record **in place, keeping
         its id** (so a re-capture to fix a bad grab keeps a stable handle);
-        otherwise a new record with a fresh id is created.
+        otherwise a new record with a fresh id is created. ``checkpoint`` marks
+        the screen as a crawl **starting point** (the anchor a crawl runs from).
         """
         existing = next((s for s in self.screens() if s.get("label") == label), None)
         record = {
@@ -87,6 +92,7 @@ class ScreenLibrary:
             "content_fingerprint": observation.content_fingerprint(),
             "screenshot": screenshot,
             "captured_at": _now(),
+            "is_checkpoint": bool(checkpoint) or bool(existing and existing.get("is_checkpoint")),
             "elements": [e.as_dict() for e in observation.elements()],
         }
         self.data["screens"] = [s for s in self.screens()
@@ -112,6 +118,15 @@ class ScreenLibrary:
         if rec is None:
             return False
         rec["label"] = new_label
+        return True
+
+    def set_checkpoint(self, screen_id: str, value: bool = True) -> bool:
+        """Flag (or unflag) a record as a crawl starting point. Returns True if
+        the id existed."""
+        rec = self.get(screen_id)
+        if rec is None:
+            return False
+        rec["is_checkpoint"] = bool(value)
         return True
 
     # -- read ----------------------------------------------------------------
