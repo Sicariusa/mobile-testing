@@ -83,6 +83,41 @@ def test_report_path_traversal_is_blocked():
         httpd.shutdown()
 
 
+def _post(base, path, payload):
+    data = json.dumps(payload).encode("utf-8")
+    req = urllib.request.Request(base + path, data=data,
+                                 headers={"Content-Type": "application/json"})
+    with urllib.request.urlopen(req) as r:
+        return r.status, json.loads(r.read().decode("utf-8"))
+
+
+def test_screen_remove_and_rename_endpoints_are_wired():
+    httpd, base = _server()
+    try:
+        # a package/id that doesn't exist: endpoints respond cleanly, no write
+        code, rem = _post(base, "/api/screens/remove",
+                          {"package": "does.not.exist", "id": "scr_nope"})
+        assert code == 200 and rem["removed"] is False
+        code, ren = _post(base, "/api/screens/rename",
+                          {"package": "does.not.exist", "id": "scr_nope", "label": "x"})
+        assert code == 200 and ren["renamed"] is False
+    finally:
+        httpd.shutdown()
+
+
+def test_screens_static_path_traversal_is_blocked():
+    httpd, base = _server()
+    try:
+        try:
+            urllib.request.urlopen(base + "/screens/../cli.py")
+            raised = False
+        except urllib.error.HTTPError as exc:
+            raised = exc.code == 404
+        assert raised, "path traversal outside screens/ must 404"
+    finally:
+        httpd.shutdown()
+
+
 def test_unknown_route_is_404():
     httpd, base = _server()
     try:

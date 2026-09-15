@@ -37,6 +37,19 @@ web control panel. Builds on the perception-first engine below.
   from `GET /api/apks`), and **per-step diagnostics inline** after a non-PASS run
   (the same data as the terminal). `start-web.bat` boots the server and opens the
   page in one double-click. Full walkthrough in `docs/WEB_PANEL_GUIDE.md`.
+- **Immutable screen identity + library editing** (follow-up) — every captured
+  screen is now a record with an **immutable id** (`scr_…`); the label is
+  human-facing only. `ScreenLibrary` gained `get`/`remove`/`rename` (all **by
+  id**, so a duplicate or renamed label can never delete the wrong capture),
+  `duplicates()` (fingerprints shared by >1 record — a hint, never a validity
+  judgement), and a migration that backfills ids onto legacy entries. Records
+  carry `package`, `activity`, `structural`/`content` fingerprints, `captured_at`
+  and the screenshot. The web Screens panel shows **thumbnails**, a fingerprint
+  column, a captured counter, inline capture feedback, a duplicate flag, and
+  per-row **Rename / Remove**; screenshots are served through a path-escape
+  guarded `/screens/` route (`screens/<pkg>/shots/<id>.png`). Reports open in a
+  **new tab**. No engine hot-path change — capture correctness and editing are
+  all outside the runner.
 - **Run diagnostics** (`cli.py`) — a non-PASS run now prints each blocked/failed
   step's `failure_reason`, the screen it was on, and the nearest ranked on-screen
   matches (was only in `timeline.json`).

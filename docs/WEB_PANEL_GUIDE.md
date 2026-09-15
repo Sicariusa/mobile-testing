@@ -100,11 +100,24 @@ That is the entire workflow with no terminal beyond step 1's `py cli.py web`
 - **Stop** — kills the running emulator (`adb emu kill`).
 
 ### Screens (pre-fetch library)
-- **package box + Load** — show the captured screen library for a package
-  (label, activity, element / tappable / field counts).
+- **package box + Load** — show the captured library for a package as a table:
+  **thumbnail**, label, activity, short **fingerprint**, element / tappable /
+  field counts, and a **captured** counter in the header. A row whose fingerprint
+  is shared by another capture is flagged **⚠ dup**.
 - **Launch app** — open that package to its launcher screen so you can drive it.
 - **label box + Capture current screen** — snapshot whatever is on the device
-  now into the library under that name.
+  now into the library under that name. An inline status line by the button
+  confirms it (no need to scroll to the log). Re-capturing an existing label
+  updates that record in place (same id).
+- **Rename / Remove** (per row) — fix a mislabelled capture without another
+  device interaction, or delete a bad one. Both act on the record's **immutable
+  id**, so they always hit the row you clicked even if two rows share a label.
+
+> **Why the thumbnail matters.** Two captures can have the same element count and
+> even different fingerprints yet one be mislabelled — e.g. a `product` row that
+> is actually the catalog. The thumbnail shows the truth at a glance; Rename or
+> Remove fixes it. The label you type is cosmetic — matching is always by
+> fingerprint (structure), never by name.
 
 > **The label is cosmetic.** Screens are matched at run time by
 > `structural_fingerprint` (the app's real activity + element structure), never
@@ -122,7 +135,7 @@ That is the entire workflow with no terminal beyond step 1's `py cli.py web`
 
 ### Reports
 - List of past runs with a **PASS / FAIL / other** tag and run id.
-- **View** opens that run's `report.html` inline in the page.
+- **View** opens that run's `report.html` in a **new browser tab**.
 
 ### Log strip
 Every action's outcome, newest on top, colour-coded. Run diagnostics and
@@ -146,8 +159,11 @@ Thin JSON over the same functions the CLI uses (`webapp/server.py`).
 | `POST /api/emulator` | `{action:"start"\|"stop", avd?}` | — |
 | `POST /api/launch` | `{package}` → open the app | yes |
 | `POST /api/inspect` | `{label}` → capture current screen | yes |
+| `POST /api/screens/remove` | `{package, id}` → delete a captured record | no |
+| `POST /api/screens/rename` | `{package, id, label}` → relabel a record | no |
 | `POST /api/run` | `{test, apk?}` → run; returns counts + diagnostics | yes |
 | `GET /reports/<run>/…` | serve a report file (path-escape guarded) | no |
+| `GET /screens/<pkg>/…` | serve a screenshot thumbnail (path-escape guarded) | no |
 
 You can hit these directly too, e.g.:
 

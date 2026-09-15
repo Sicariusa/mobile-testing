@@ -61,6 +61,59 @@ def test_find_bearing_points_at_captured_control(tmp_path):
     assert bearing["center"] == (470, 780)
 
 
+def test_records_get_a_stable_immutable_id(tmp_path):
+    lib = ScreenLibrary("com.example.shop", base_dir=str(tmp_path))
+    rec = lib.add(_obs(".Catalog", CATALOG_XML), "catalog")
+    assert rec["id"].startswith("scr_")
+    # re-capturing the same label keeps the SAME id (stable handle)
+    rec2 = lib.add(_obs(".Catalog", CATALOG_XML), "catalog")
+    assert rec2["id"] == rec["id"]
+    assert len(lib.screens()) == 1
+
+
+def test_remove_and_rename_operate_by_id(tmp_path):
+    lib = ScreenLibrary("com.example.shop", base_dir=str(tmp_path))
+    a = lib.add(_obs(".A", CATALOG_XML), "product")["id"]
+    b = lib.add(_obs(".B", CATALOG_XML.replace("Backpack", "Onesie")), "screen")["id"]
+    assert a != b
+    # rename by id — label changes, id and count unchanged
+    assert lib.rename(a, "catalog") is True
+    assert lib.get(a)["label"] == "catalog"
+    assert lib.rename("scr_missing", "x") is False
+    # remove by id — only that record goes, even after a duplicate label
+    assert lib.remove(b) is True
+    assert lib.remove(b) is False
+    assert [s["label"] for s in lib.screens()] == ["catalog"]
+    assert lib.get(a) is not None
+
+
+def test_legacy_entry_without_id_is_migrated(tmp_path):
+    import json, os
+    d = tmp_path / "com.example.shop"
+    d.mkdir()
+    (d / "library.json").write_text(json.dumps({
+        "package": "com.example.shop",
+        "screens": [{"label": "old", "structural_fingerprint": "abc", "elements": []}],
+    }), encoding="utf-8")
+    lib = ScreenLibrary("com.example.shop", base_dir=str(tmp_path))
+    assert lib.screens()[0]["id"].startswith("scr_")
+    # migration persisted, so a reload keeps the same id
+    same_id = lib.screens()[0]["id"]
+    lib2 = ScreenLibrary("com.example.shop", base_dir=str(tmp_path))
+    assert lib2.screens()[0]["id"] == same_id
+
+
+def test_duplicates_flags_shared_fingerprints_only(tmp_path):
+    lib = ScreenLibrary("com.example.shop", base_dir=str(tmp_path))
+    lib.add(_obs(".Same", CATALOG_XML), "one")
+    lib.add(_obs(".Same", CATALOG_XML), "two")            # identical fingerprint
+    lib.add(_obs(".Other", CATALOG_XML.replace("Backpack", "Bike")), "three")
+    dupes = lib.duplicates()
+    assert len(dupes) == 1                                # only the shared fp
+    ids = next(iter(dupes.values()))
+    assert len(ids) == 2
+
+
 def test_clickable_ancestor_promotion_ranks_the_card():
     # ranking "Backpack" (a non-clickable title) for a tap must surface the
     # clickable card ancestor, not only the rejected title.

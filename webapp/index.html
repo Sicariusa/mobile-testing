@@ -34,6 +34,10 @@
   #log{grid-column:1/3;background:#0b0e18;border:1px solid var(--line);border-radius:8px;padding:12px;
     font-family:ui-monospace,Consolas,monospace;font-size:12.5px;white-space:pre-wrap;color:#c6d4f0;min-height:44px}
   iframe{width:100%;height:420px;border:1px solid var(--line);border-radius:8px;background:#fff}
+  .thumb{width:60px;height:auto;max-height:110px;border:1px solid var(--line);border-radius:5px;background:#000;display:block}
+  .mono{font-family:ui-monospace,Consolas,monospace;font-size:11px;color:var(--muted)}
+  .mini{padding:3px 8px;font-size:12px}
+  td.acts{white-space:nowrap}
   @media(max-width:820px){main{grid-template-columns:1fr}.full,.row,#log{grid-column:auto}}
 </style>
 </head>
@@ -57,7 +61,7 @@
   </div>
 
   <div class="card">
-    <h2>Screens (pre-fetch library)</h2>
+    <h2>Screens (pre-fetch library) <span id="scount" class="muted"></span></h2>
     <div class="row">
       <input id="pkg" placeholder="package (e.g. com.swaglabsmobileapp)" style="flex:1">
       <button onclick="loadScreens()">Load</button>
@@ -66,6 +70,7 @@
     <div class="row">
       <input id="caplabel" placeholder="label (e.g. catalog)">
       <button class="primary" onclick="capture()">Capture current screen</button>
+      <span id="capstatus" class="muted"></span>
     </div>
     <div id="screens" class="muted">Drive the app to a screen, name it, and Capture.</div>
   </div>
@@ -83,7 +88,6 @@
   <div class="card full">
     <h2>Reports</h2>
     <div id="reports" class="muted">loading…</div>
-    <iframe id="reportframe" hidden></iframe>
   </div>
 
   <div id="log">ready.</div>
@@ -164,23 +168,56 @@ async function loadTests(){
     </tr>`).join("");
   }catch(err){ $("#tests tbody").innerHTML = `<tr><td class="bad">${err.message}</td></tr>`; }
 }
+const esc = s => String(s??"").replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 async function loadScreens(){
   const pkg = $("#pkg").value.trim(); if(!pkg){ log("enter a package first","warn"); return; }
   try{
     const s = await api("/api/screens?package="+encodeURIComponent(pkg));
+    $("#scount").textContent = s.screens.length ? `· ${s.screens.length} captured` : "";
     if(!s.screens.length){ $("#screens").innerHTML = `<span class="muted">No captured screens yet.</span>`; return; }
-    $("#screens").innerHTML = `<table><thead><tr><th>Label</th><th>Activity</th><th>Elems</th><th>Tap</th><th>Fields</th></tr></thead><tbody>`+
-      s.screens.map(x=>`<tr><td>${x.label}</td><td class="muted">${x.activity||''}</td><td>${x.elements}</td><td>${x.tappable}</td><td>${x.fields}</td></tr>`).join("")+`</tbody></table>`;
+    $("#screens").innerHTML = `<table><thead><tr><th></th><th>Label</th><th>Activity</th><th>Fingerprint</th><th>Elems</th><th>Tap</th><th>Fld</th><th></th></tr></thead><tbody>`+
+      s.screens.map(x=>{
+        const dup = (x.duplicate_of||[]).length ? ` <span class="warn" title="same fingerprint as another capture">⚠ dup</span>` : "";
+        const thumb = x.screenshot ? `<a href="${x.screenshot}" target="_blank"><img class="thumb" src="${x.screenshot}" alt=""></a>` : `<span class="muted">—</span>`;
+        return `<tr>
+          <td>${thumb}</td>
+          <td>${esc(x.label)}${dup}<div class="mono" title="${x.captured_at||''}">${(x.captured_at||'').replace('T',' ')}</div></td>
+          <td class="muted">${esc(x.activity||'')}</td>
+          <td class="mono">${(x.fingerprint||'').slice(0,8)}</td>
+          <td>${x.elements}</td><td>${x.tappable}</td><td>${x.fields}</td>
+          <td class="acts">
+            <button class="mini" onclick="renameScreen('${x.id}','${esc(x.label)}')">Rename</button>
+            <button class="mini" onclick="removeScreen('${x.id}','${esc(x.label)}')">Remove</button>
+          </td></tr>`;
+      }).join("")+`</tbody></table>`;
   }catch(err){ $("#screens").innerHTML = `<span class="bad">${err.message}</span>`; }
 }
 async function capture(){
   const label = $("#caplabel").value.trim()||"screen";
-  log("capturing '"+label+"' …");
+  $("#capstatus").innerHTML = `capturing '${esc(label)}' …`;
   try{
     const r = await api("/api/inspect",{method:"POST",headers:{'Content-Type':'application/json'},body:JSON.stringify({label})});
+    $("#capstatus").innerHTML = `<span class="ok">captured '${esc(r.label)}' · ${r.activity} · ${r.elements} el · ${r.screens} in library</span>`;
     log(`captured '${r.label}' — ${r.package} · ${r.activity} · ${r.elements} elements · lib now ${r.screens}`,"ok");
     $("#pkg").value = r.package; loadScreens();
-  }catch(err){ log("capture failed: "+err.message,"bad"); }
+  }catch(err){ $("#capstatus").innerHTML = `<span class="bad">capture failed: ${esc(err.message)}</span>`; log("capture failed: "+err.message,"bad"); }
+}
+async function removeScreen(id, label){
+  if(!confirm(`Remove captured screen '${label}'? This cannot be undone.`)) return;
+  const pkg = $("#pkg").value.trim();
+  try{
+    await api("/api/screens/remove",{method:"POST",headers:{'Content-Type':'application/json'},body:JSON.stringify({package:pkg,id})});
+    log(`removed '${label}'`,"warn"); loadScreens();
+  }catch(err){ log("remove failed: "+err.message,"bad"); }
+}
+async function renameScreen(id, current){
+  const label = prompt("Rename captured screen:", current);
+  if(!label || label===current) return;
+  const pkg = $("#pkg").value.trim();
+  try{
+    await api("/api/screens/rename",{method:"POST",headers:{'Content-Type':'application/json'},body:JSON.stringify({package:pkg,id,label:label.trim()})});
+    log(`renamed '${current}' → '${label.trim()}'`,"ok"); loadScreens();
+  }catch(err){ log("rename failed: "+err.message,"bad"); }
 }
 async function run(path){
   const apk = $("#apk").value || null;
@@ -211,7 +248,7 @@ async function loadReports(){
     }).join("");
   }catch(err){ $("#reports").innerHTML = `<span class="bad">${err.message}</span>`; }
 }
-function viewReport(url){ const f=$("#reportframe"); f.src=url; f.hidden=false; }
+function viewReport(url){ window.open(url, "_blank", "noopener"); }
 function refreshAll(){ loadEnv(); loadTests(); loadReports(); loadAvds(); loadApks(); }
 refreshAll();
 </script>

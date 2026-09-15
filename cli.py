@@ -169,13 +169,15 @@ def cmd_screens(args: argparse.Namespace) -> int:
               f"\n  py cli.py inspect --label <name> --into-library")
         return 0
     print(f"Screen library — {package}  ({len(screens)} screen(s))  → {lib.path}")
+    dupes = {sid for ids in lib.duplicates().values() for sid in ids}
     for s in screens:
         els = s.get("elements", [])
         tappable = sum(1 for e in els if e.get("clickable"))
         fields = sum(1 for e in els if e.get("editable"))
-        print(f"  • {s['label']:16} activity={s.get('activity')}"
+        dup = "  ⚠ dup-fingerprint" if s.get("id") in dupes else ""
+        print(f"  • {s['label']:16} id={s.get('id')}  activity={s.get('activity')}"
               f"  fp={s.get('structural_fingerprint')}"
-              f"  elements={len(els)} (tappable={tappable}, fields={fields})")
+              f"  elements={len(els)} (tappable={tappable}, fields={fields}){dup}")
     return 0
 
 

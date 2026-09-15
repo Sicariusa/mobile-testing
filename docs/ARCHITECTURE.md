@@ -171,6 +171,15 @@ and recovery's wait loop (it's waiting for async change). Measured live: **23 �
 dumps (74% fewer), 51 s → 29 s** on `sauce_vague.yaml`. `FakeDevice` has a no-op
 `invalidate()` so the interface matches.
 
+> **Architectural guarantee — one hierarchy snapshot per screen state.** Within a
+> single screen state, resolution, recovery, verification, selector ranking and
+> debug all consume the *same* dump; only a mutating action (which invalidates)
+> or a consumer that must detect change (`settle`, recovery's wait loop, which
+> force-fresh) triggers a new one. This is the single most important engine-
+> efficiency invariant — more than anything in the panel. The memo is where it is
+> enforced; adding a new consumer means reading through the memo, never issuing a
+> fresh `dump_hierarchy()` of your own.
+
 ---
 
 ## 6. Observation (`engine/observation.py`)
@@ -228,10 +237,21 @@ the learned map to `reports/<run>/bindings.json` as evidence of auto-binding.
 
 A reusable, per-app map of the screens the user chose to test, captured up front
 by driving the app (`inspect --into-library`). Persists to
-`screens/<package>/library.json`; one entry per screen holding its `label`,
-`activity`, `structural_fingerprint`, `content_fingerprint`, `screenshot`, and
-full element inventory (the same bundle shape `cli.py inspect` writes — the
+`screens/<package>/library.json`. Each entry is a **ScreenRecord** with an
+**immutable id** (`scr_…`) plus `label`, `package`, `activity`,
+`structural_fingerprint`, `content_fingerprint`, `screenshot`, `captured_at`, and
+the full element inventory (the same bundle shape `cli.py inspect` writes — the
 inspector stays the single writer).
+
+**Identity is the id, never the label.** The label is human-facing only, so it
+may be edited or duplicated freely. `get`/`remove`/`rename` all operate **by id**
+— a duplicate or renamed label can never delete the wrong capture. `add()`
+re-captures a label **in place, keeping its id** (a stable handle). A migration
+backfills ids onto any legacy entry on load. A `structural_fingerprint` is
+*evidence of a possible duplicate* (`duplicates()` reports fingerprints shared by
+more than one record), **never proof a capture is invalid**: two structurally
+different states can share an element count yet mean different things — the reason
+the panel also shows a thumbnail.
 
 - **`match(fingerprint)`** — the captured entry whose *structural* fingerprint
   equals the current screen's (the same identity test the cache uses).
@@ -397,7 +417,9 @@ A stdlib `http.server` (`webapp/server.py`) + one static page
 (`webapp/index.html`), no new dependencies. Every endpoint is a thin call into
 the same engine functions the CLI uses — no engine logic is duplicated:
 `GET /api/{env,testcases,screens,reports,avds,apks,preflight}`,
-`POST /api/{inspect,run,emulator,launch}`; report files are path-escape guarded.
+`POST /api/{inspect,run,emulator,launch,screens/remove,screens/rename}`; report
+and screenshot files are served through path-escape guarded `/reports/` and
+`/screens/` routes.
 The panel drives the whole loop from the browser — start/stop the emulator,
 launch an app, capture screens, preflight, install-and-run, read diagnostics and
 reports. See [`WEB_PANEL_GUIDE.md`](WEB_PANEL_GUIDE.md).

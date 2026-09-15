@@ -67,32 +67,77 @@ def _reports() -> list[dict[str, Any]]:
 def _screens(package: str) -> dict[str, Any]:
     from engine.screen_library import ScreenLibrary
     lib = ScreenLibrary(package)
+    dupes = lib.duplicates()
+    fp_to_ids = {}
+    for fp, ids in dupes.items():
+        for sid in ids:
+            fp_to_ids[sid] = [i for i in ids if i != sid]
     rows = []
     for s in lib.screens():
         els = s.get("elements", [])
-        rows.append({"label": s["label"], "activity": s.get("activity"),
-                     "fingerprint": s.get("structural_fingerprint"),
+        fp = s.get("structural_fingerprint")
+        rows.append({"id": s.get("id"), "label": s["label"],
+                     "activity": s.get("activity"), "package": s.get("package"),
+                     "fingerprint": fp, "captured_at": s.get("captured_at"),
                      "elements": len(els),
                      "tappable": sum(1 for e in els if e.get("clickable")),
                      "fields": sum(1 for e in els if e.get("editable")),
-                     "screenshot": s.get("screenshot")})
+                     "screenshot": _shot_url(s.get("screenshot")),
+                     "duplicate_of": fp_to_ids.get(s.get("id"), [])})
     return {"package": package, "screens": rows}
 
 
+def _shot_url(path: str | None) -> str | None:
+    """A stored screenshot path (relative to repo root) → a URL the panel can
+    load through the guarded /screens/ route; None if there is no screenshot."""
+    if not path:
+        return None
+    rel = os.path.relpath(os.path.join(ROOT, path), ROOT).replace("\\", "/")
+    return "/" + rel if rel.startswith("screens/") else None
+
+
 def _capture(label: str, serial: str | None) -> dict[str, Any]:
-    """Drive-capture the current screen into the library (needs a device)."""
+    """Drive-capture the current screen into the library (needs a device).
+
+    The screenshot is stored under ``screens/<pkg>/shots/<id>.png`` — named by
+    the record's immutable id, so a re-capture or rename never orphans it.
+    """
     from engine.observation import observe
     from engine.screen_library import ScreenLibrary
     dev = device_mod.connect(serial=serial or None)
-    out_dir = os.path.join(ROOT, "screens", "_web", label)
-    os.makedirs(out_dir, exist_ok=True)
-    obs = observe(dev, os.path.join(out_dir, "screenshot.png"))
+    obs = observe(dev)  # element inventory now; screenshot once we know the id
     lib = ScreenLibrary(obs.package or "app")
-    lib.add(obs, label, screenshot=os.path.join(out_dir, "screenshot.png"))
+    record = lib.add(obs, label)
+    shots_dir = os.path.join(lib.dir, "shots")
+    os.makedirs(shots_dir, exist_ok=True)
+    shot_abs = os.path.join(shots_dir, f"{record['id']}.png")
+    try:
+        dev.screenshot(shot_abs)
+        record["screenshot"] = os.path.relpath(shot_abs, ROOT).replace("\\", "/")
+    except Exception:
+        record["screenshot"] = None
     lib.save()
-    return {"label": label, "package": obs.package, "activity": obs.activity,
-            "fingerprint": obs.structural_fingerprint(),
+    return {"id": record["id"], "label": label, "package": obs.package,
+            "activity": obs.activity, "fingerprint": obs.structural_fingerprint(),
             "elements": len(obs.elements()), "screens": len(lib.screens())}
+
+
+def _remove_screen(package: str, screen_id: str) -> dict[str, Any]:
+    from engine.screen_library import ScreenLibrary
+    lib = ScreenLibrary(package)
+    removed = lib.remove(screen_id)
+    if removed:
+        lib.save()
+    return {"removed": removed, "id": screen_id, "screens": len(lib.screens())}
+
+
+def _rename_screen(package: str, screen_id: str, label: str) -> dict[str, Any]:
+    from engine.screen_library import ScreenLibrary
+    lib = ScreenLibrary(package)
+    ok = lib.rename(screen_id, label)
+    if ok:
+        lib.save()
+    return {"renamed": ok, "id": screen_id, "label": label}
 
 
 def _run(test: str, apk: str | None, serial: str | None) -> dict[str, Any]:
@@ -270,7 +315,7 @@ class Handler(BaseHTTPRequestHandler):
                 if not test:
                     return self._json({"error": "missing test"}, 400)
                 return self._json(_preflight(test))
-            if path.startswith("/reports/"):
+            if path.startswith("/reports/") or path.startswith("/screens/"):
                 return self._serve_static(path)
             return self._json({"error": "not found"}, 404)
         except Exception as exc:
@@ -294,6 +339,11 @@ class Handler(BaseHTTPRequestHandler):
                                             payload.get("avd"), payload.get("serial")))
             if self.path == "/api/launch":
                 return self._json(_launch(payload["package"], payload.get("serial")))
+            if self.path == "/api/screens/remove":
+                return self._json(_remove_screen(payload["package"], payload["id"]))
+            if self.path == "/api/screens/rename":
+                return self._json(_rename_screen(payload["package"], payload["id"],
+                                                 payload["label"]))
             return self._json({"error": "not found"}, 404)
         except KeyError as exc:
             return self._json({"error": f"missing field {exc}"}, 400)
@@ -303,11 +353,13 @@ class Handler(BaseHTTPRequestHandler):
             return self._json({"error": str(exc)}, 500)
 
     def _serve_static(self, path: str) -> None:
-        # Serve report files, safely scoped under reports/.
+        # Serve report + screenshot files, each safely scoped under its root so
+        # a "../" cannot escape into the rest of the repo.
         rel = path.lstrip("/")
         full = os.path.normpath(os.path.join(ROOT, rel))
-        reports_root = os.path.join(ROOT, "reports")
-        if not full.startswith(reports_root) or not os.path.isfile(full):
+        allowed = (os.path.join(ROOT, "reports") + os.sep,
+                   os.path.join(ROOT, "screens") + os.sep)
+        if not full.startswith(allowed) or not os.path.isfile(full):
             return self._json({"error": "not found"}, 404)
         ctype = ("text/html; charset=utf-8" if full.endswith(".html")
                  else "image/png" if full.endswith(".png")
