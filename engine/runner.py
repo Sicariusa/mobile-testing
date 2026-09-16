@@ -138,7 +138,9 @@ def _run_assert(device: Device, assertion: dict[str, Any],
     if assertion.get("type") in ("screen_changed", "activity_changed"):
         before, after = last_before, last_after
     else:
-        before, after = current, current
+        # point-in-time assertion: there is no meaningful 'before' — leave it None
+        # so the report shows the single observed screen, not a fabricated pair
+        before, after = None, current
 
     outcome = validator_mod.validate(assertion, before, after, logcat)
     ocr_matches = _collect_ocr(after, assertion, outcome.validated_by)
