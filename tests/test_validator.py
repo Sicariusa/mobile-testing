@@ -53,6 +53,16 @@ def test_activity_is():
     assert bad.status is Status.FAIL
 
 
+def test_activity_is_not_substring():
+    # 'Cart' must not match a different, longer activity that contains it.
+    after = _obs(activity="com.example.shop/.ShoppingCartActivity")
+    out = validator.validate({"type": "activity_is", "value": "Cart"}, after, after)
+    assert out.status is Status.FAIL
+    boundary = validator.validate({"type": "activity_is", "value": ".ShoppingCartActivity"},
+                                  after, after)
+    assert boundary.status is Status.PASS
+
+
 def test_element_exists():
     after = _obs(hierarchy(node(resource_id="com.example.shop:id/pay")))
     ok = validator.validate({"type": "element_exists", "id": "com.example.shop:id/pay"},

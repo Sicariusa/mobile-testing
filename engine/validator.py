@@ -239,7 +239,14 @@ def _hierarchy_has_element(xml: Optional[str], target: dict[str, Any]) -> bool:
 def _activity_matches(activity: Optional[str], expected: Optional[str]) -> bool:
     if not activity or not expected:
         return False
-    return activity == expected or activity.endswith(expected) or expected in activity
+    if activity == expected:
+        return True
+    # suffix match only on a component boundary: '.HomeActivity' matches
+    # 'com.app/.HomeActivity', but 'Cart' must not match 'ShoppingCartActivity'
+    if activity.endswith(expected):
+        prefix = activity[:-len(expected)]
+        return not prefix or prefix[-1] in "./"
+    return False
 
 
 # --- OCR + diff helpers ------------------------------------------------------
