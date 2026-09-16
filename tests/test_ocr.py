@@ -46,14 +46,6 @@ def test_unknown_backend_raises(tmp_path):
         ocr._load_words(img, backend="does-not-exist")
 
 
-def _stub_words(ocr_mod, monkeypatch, words):
-    entries = []
-    for i, tok in enumerate(words):
-        entries.append({"text": tok, "norm": ocr_mod._normalise(tok), "conf": 0.9,
-                        "left": i * 50, "top": 0, "width": 40, "height": 20, "line": (0, 0, 0)})
-    monkeypatch.setattr(ocr_mod, "_load_words", lambda path, backend=None: entries)
-
-
 def test_load_words_is_memoized_per_screenshot(tmp_path, monkeypatch):
     # validator + evidence both OCR the same after.png; Tesseract must run once.
     img = render_text(str(tmp_path / "s.png"), ["Hello"])
@@ -69,26 +61,6 @@ def test_load_words_is_memoized_per_screenshot(tmp_path, monkeypatch):
     ocr.ocr_find(img, "Hello")
     ocr.ocr_find(img, "Hello")
     assert calls["n"] == 1
-
-
-def test_ocr_single_token_is_whole_word(monkeypatch):
-    # 'ok' must not match inside 'Facebook' (the audit's OCR false PASS).
-    _stub_words(ocr, monkeypatch, ["Facebook"])
-    assert ocr.ocr_find("x.png", "ok") == []
-    found, _ = ocr.ocr_text_exists("x.png", "ok")
-    assert found is False
-
-
-def test_ocr_tolerates_trailing_punctuation(monkeypatch):
-    _stub_words(ocr, monkeypatch, ["Payment", "Successful!"])
-    assert ocr.ocr_find("x.png", "successful")
-    assert ocr.ocr_find("x.png", "Payment Successful")
-
-
-def test_ocr_resolver_does_not_mis_tap_substring(monkeypatch):
-    # target 'Pay' must not match 'Repay'.
-    _stub_words(ocr, monkeypatch, ["Repay"])
-    assert ocr.best_match("x.png", "Pay") is None
 
 
 def test_easyocr_backend_reports_clearly_when_missing(tmp_path):

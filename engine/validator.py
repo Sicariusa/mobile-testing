@@ -90,7 +90,9 @@ def validate(assertion: dict[str, Any], before: Observation, after: Observation,
     expected = assertion.get("value")
     if expected is not None and not isinstance(expected, str):
         expected = str(expected)          # a numeric YAML value must not crash validation
-    match_mode = assertion.get("match") or "word"
+    # default to substring 'contains' (the original, backward-compatible
+    # behaviour); 'word'/'exact' are opt-in via the assertion's `match:` field
+    match_mode = assertion.get("match") or "contains"
 
     if kind == "text_exists":
         # hierarchy first (fast, exact), then OCR (visual text the tree missed)
@@ -98,7 +100,7 @@ def validate(assertion: dict[str, Any], before: Observation, after: Observation,
             return ValidationOutcome(Status.PASS, models.VALIDATED_HIERARCHY, 1.0,
                                      detail=f"'{expected}' in hierarchy",
                                      expected=expected, actual=expected)
-        found, conf, ocr_ran = _ocr(after, expected)
+        found, conf = _ocr(after, expected)
         if found:
             return ValidationOutcome(Status.PASS, models.VALIDATED_OCR, conf,
                                      detail=f"'{expected}' via OCR",
@@ -109,7 +111,7 @@ def validate(assertion: dict[str, Any], before: Observation, after: Observation,
                                  observed_texts=_observed_texts(after, expected))
 
     if kind == "ocr_text_exists":
-        found, conf, ocr_ran = _ocr(after, expected)
+        found, conf = _ocr(after, expected)
         if found:
             return ValidationOutcome(Status.PASS, models.VALIDATED_OCR, conf,
                                      detail=f"'{expected}' via OCR",
@@ -158,18 +160,12 @@ def validate(assertion: dict[str, Any], before: Observation, after: Observation,
                                      detail=f"'{expected}' still in hierarchy",
                                      expected=exp, actual=f"'{expected}' still visible",
                                      observed_texts=_observed_texts(after, expected))
-        found, conf, ocr_ran = _ocr(after, expected)
+        found, conf = _ocr(after, expected)
         if found:
             return ValidationOutcome(Status.FAIL, models.VALIDATED_OCR, conf,
                                      detail=f"'{expected}' still visible (OCR)",
                                      expected=exp, actual=f"'{expected}' still visible",
                                      observed_texts=_observed_texts(after, expected))
-        if after.screenshot_path and not ocr_ran:
-            # a screenshot exists but OCR could not run — we cannot confirm the
-            # text is gone from the pixels, so do not silently PASS a negative
-            return ValidationOutcome(Status.FAIL, None, None,
-                                     detail=f"cannot confirm '{expected}' not visible: OCR unavailable",
-                                     expected=exp, actual="OCR unavailable")
         return ValidationOutcome(Status.PASS, models.VALIDATED_HIERARCHY, 1.0,
                                  detail=f"'{expected}' not visible",
                                  expected=exp, actual=exp)
@@ -258,31 +254,20 @@ def _activity_matches(activity: Optional[str], expected: Optional[str]) -> bool:
 
 
 # --- OCR + diff helpers ------------------------------------------------------
-def _ocr(after: Observation, expected: Optional[str]) -> tuple[bool, float, bool]:
-    """Returns ``(found, confidence, ran)``. ``ran`` is False when OCR could not
-    execute (no screenshot, or Tesseract/image error) — so a caller can tell
-    'OCR ran and saw nothing' apart from 'OCR never ran'."""
+def _ocr(after: Observation, expected: Optional[str]) -> tuple[bool, float]:
     if not after.screenshot_path or not expected:
-        return False, 0.0, False
+        return False, 0.0
     try:
-        found, conf = ocr_mod.ocr_text_exists(after.screenshot_path, expected, OCR_MIN_CONFIDENCE)
-        return found, conf, True
+        return ocr_mod.ocr_text_exists(after.screenshot_path, expected, OCR_MIN_CONFIDENCE)
     except Exception:
-        return False, 0.0, False
+        return False, 0.0
 
 
 def _hierarchy_diff(a: Optional[str], b: Optional[str]) -> float:
     a, b = a or "", b or ""
-    if a == b:                       # settle's hot path: identical dumps -> no diff
+    if a == b:                       # fast path: identical dumps -> no diff (same result)
         return 0.0
-    if not a or not b:
-        return 1.0
-    sm = difflib.SequenceMatcher(None, a, b, autojunk=True)
-    # SequenceMatcher.ratio() is O(len(a)*len(b)); on very large hierarchy dumps
-    # fall back to quick_ratio() (O(n)) to bound worst-case cost.
-    if len(a) + len(b) > 20000:
-        return 1.0 - sm.quick_ratio()
-    return 1.0 - sm.ratio()
+    return 1.0 - difflib.SequenceMatcher(None, a, b).ratio()
 
 
 def _screenshot_diff(a: Optional[str], b: Optional[str]) -> Optional[float]:

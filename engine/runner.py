@@ -81,7 +81,7 @@ def run(testcase: Union[str, dict[str, Any]], device: Device, *,
         try:
             if "assert" in step:
                 res = _run_assert(device, step["assert"], last_before, last_after,
-                                  after_path, _safe_logcat_new(device))
+                                  after_path, _safe_logcat(device))
             else:
                 res = executor_mod.execute(
                     device, step, data=data, package=package,
@@ -240,12 +240,5 @@ def _counts(results: list[ActionResult]) -> dict[str, int]:
 def _safe_logcat(device: Device) -> str:
     try:
         return device.logcat_since_launch()
-    except Exception:
-        return ""
-
-
-def _safe_logcat_new(device: Device) -> str:
-    try:
-        return device.logcat_new()
     except Exception:
         return ""

@@ -91,9 +91,10 @@ def test_change_ratio_identical_is_zero():
 
 
 def test_text_exists_word_boundary_no_false_pass():
-    # 'Success' must NOT match inside 'Unsuccessful' (the audit's false PASS).
+    # opt-in match=word: 'Success' must NOT match inside 'Unsuccessful'.
     after = _obs(hierarchy(node(text="Unsuccessful")))
-    out = validator.validate({"type": "text_exists", "value": "Success"}, after, after)
+    out = validator.validate({"type": "text_exists", "value": "Success", "match": "word"},
+                             after, after)
     assert out.status is Status.FAIL
 
 
@@ -104,9 +105,10 @@ def test_text_exists_phrase_as_whole_words():
 
 
 def test_not_visible_word_boundary_no_false_fail():
-    # 'Cart' as a substring of 'Carthage' must not keep not_visible FAILing.
+    # opt-in match=word: 'Cart' as a substring of 'Carthage' must not FAIL not_visible.
     after = _obs(hierarchy(node(text="Carthage ruins")))
-    out = validator.validate({"type": "not_visible", "value": "Cart"}, after, after)
+    out = validator.validate({"type": "not_visible", "value": "Cart", "match": "word"},
+                             after, after)
     assert out.status is Status.PASS
 
 

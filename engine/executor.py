@@ -196,8 +196,8 @@ def execute(d: Device, step: dict[str, Any], *,
         detail = "screen settle timeout"
     after = observe(d, after_path)
 
-    # crash gate — only the new lines since the last step (not the whole buffer)
-    fatal = logcat_fatal(_safe_logcat_new(d))
+    # crash gate
+    fatal = logcat_fatal(_safe_logcat(d))
     if fatal:
         status = Status.CRASH
 
@@ -253,8 +253,8 @@ def _interpolate(value: Any, data: dict[str, Any]) -> Any:
     return out
 
 
-def _safe_logcat_new(d: Device) -> str:
+def _safe_logcat(d: Device) -> str:
     try:
-        return d.logcat_new()
+        return d.logcat_since_launch()
     except Exception:
         return ""

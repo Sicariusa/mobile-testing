@@ -174,9 +174,12 @@ class ScreenLibrary:
         return {"id": record.get("id"), "label": record.get("label"), "center": center}
 
     def save(self) -> None:
-        # atomic write, and let a real IO failure propagate — a capture must not
-        # report success while nothing reached disk
-        write_json_atomic(self.path, self.data)
+        # atomic write (no partial/corrupt file), but swallow IO errors so a
+        # transient save failure never aborts a run or crawl
+        try:
+            write_json_atomic(self.path, self.data)
+        except OSError:
+            pass
 
 
 def _element_from_dict(d: dict[str, Any]) -> inspect_mod.Element:

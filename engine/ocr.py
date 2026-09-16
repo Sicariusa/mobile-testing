@@ -20,10 +20,7 @@ from .config import OCR_BACKEND, OCR_MIN_CONFIDENCE
 
 
 def _normalise(s: str) -> str:
-    # collapse whitespace, lowercase, then drop punctuation so a trailing '!'/':'
-    # never defeats a match ("Successful!" -> "successful")
-    s = re.sub(r"\s+", " ", s or "").strip().lower()
-    return re.sub(r"[^\w\s]", "", s, flags=re.UNICODE)
+    return re.sub(r"\s+", " ", s or "").strip().lower()
 
 
 def _tokens(s: str) -> list[str]:
@@ -156,10 +153,9 @@ def ocr_find(image_path: str, text: str) -> list[dict[str, Any]]:
     for line_words in lines.values():
         norms = [w["norm"] for w in line_words]
         if span == 1:
-            # single token: whole-word match only — 'ok' must not match inside
-            # 'Facebook', consistent with the multi-word exact-window branch below
+            # single token: exact word, or token contained in a word
             for w in line_words:
-                if w["norm"] == target[0]:
+                if w["norm"] == target[0] or target[0] in w["norm"]:
                     b = _union_bounds([w])
                     matches.append({"text": w["text"], "confidence": w["conf"], "bounds": b})
         else:

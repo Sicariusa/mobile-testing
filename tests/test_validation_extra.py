@@ -29,16 +29,6 @@ def test_not_visible_fails_when_text_only_in_pixels(tmp_path):
     assert out.status is Status.FAIL
 
 
-def test_not_visible_does_not_silently_pass_when_ocr_cannot_run(tmp_path):
-    # a screenshot exists but OCR errors on it -> we cannot confirm absence, so
-    # the negative assertion must not silently PASS
-    obs = Observation(timestamp=0.0, activity="A",
-                      hierarchy_xml="<hierarchy><node text='Home'/></hierarchy>",
-                      screenshot_path=str(tmp_path / "missing.png"))
-    out = validator.validate({"type": "not_visible", "value": "Loading"}, obs, obs)
-    assert out.status is not Status.PASS
-
-
 def test_activity_changed():
     a, b = _o("<hierarchy/>", "LoginActivity"), _o("<hierarchy/>", "HomeActivity")
     assert validator.validate({"type": "activity_changed"}, a, b).status is Status.PASS

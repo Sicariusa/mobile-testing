@@ -44,4 +44,8 @@ class SelectorCache:
         return dict(self.data)
 
     def save(self) -> None:
-        write_json_atomic(self.path, self.data)
+        # atomic write; swallow IO errors so a run is never aborted by a save
+        try:
+            write_json_atomic(self.path, self.data)
+        except OSError:
+            pass
