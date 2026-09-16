@@ -191,7 +191,7 @@ def execute(d: Device, step: dict[str, Any], *,
             failure_reason=FailureReason.DEVICE_ERROR,
         )
 
-    settled = settle_fn(d, changed_from=before.hierarchy_xml)
+    settled = settle_fn(d)
     if not settled:
         detail = "screen settle timeout"
     after = observe(d, after_path)

@@ -299,13 +299,10 @@ class AndroidDevice(Device):
         return visible
 
     def hide_keyboard(self) -> None:
-        # ESCAPE (keycode 111) closes the IME but does NOT pop the activity the
-        # way BACK can, so it cannot navigate off the screen under test.
-        try:
-            self._adb("shell", "input", "keyevent", "111")
-        except DeviceError:
-            self._d.press("back")
-        self.invalidate()
+        # BACK reliably dismisses the soft keyboard on Android; ESCAPE (keyevent
+        # 111) does not on most IMEs, which would leave the keyboard covering the
+        # target. Keep the behaviour that actually works on a real device.
+        self.press_back()
 
     def logcat_since_launch(self) -> str:
         try:
