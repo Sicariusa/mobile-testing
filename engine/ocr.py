@@ -11,6 +11,7 @@ so "PAY NOW" matches even though Tesseract returns two word boxes.
 """
 from __future__ import annotations
 
+import os
 import re
 from functools import lru_cache
 from typing import Any, Optional
@@ -31,10 +32,20 @@ def _tokens(s: str) -> list[str]:
 
 def _load_words(image_path: str, backend: Optional[str] = None) -> list[dict[str, Any]]:
     """Return per-word OCR entries (normalised text, confidence 0..1, bounds and
-    a stable line id) from the configured backend. Backends are imported lazily,
-    so this module imports fine whether or not either engine is installed.
+    a stable line id) from the configured backend. Memoized by (path, mtime) so
+    two OCR reads of the same screenshot in one step (validator + evidence) pay
+    Tesseract only once. Backends are imported lazily.
     """
     backend = backend or OCR_BACKEND
+    try:
+        mtime = os.path.getmtime(image_path)
+    except OSError:
+        mtime = None
+    return _load_words_cached(image_path, mtime, backend)
+
+
+@lru_cache(maxsize=64)
+def _load_words_cached(image_path: str, mtime, backend: str) -> list[dict[str, Any]]:
     if backend == "tesseract":
         return _load_words_tesseract(image_path)
     if backend == "easyocr":

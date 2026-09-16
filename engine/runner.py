@@ -199,10 +199,14 @@ def _screen_summary(obs) -> Optional[dict[str, Any]]:
 
 
 def _collect_ocr(after, assertion, validated_by) -> list[dict[str, Any]]:
-    """Attach OCR match evidence when OCR was involved."""
+    """Attach OCR match evidence only when OCR is relevant: it decided the verdict
+    ('ocr'), or the assertion did not pass ('None' → the miss is worth showing).
+    A hierarchy PASS skips the full Tesseract pass it never needed."""
     if not after or not after.screenshot_path:
         return []
     if assertion.get("type") not in ("text_exists", "ocr_text_exists"):
+        return []
+    if validated_by not in ("ocr", None):
         return []
     try:
         from . import ocr as ocr_mod

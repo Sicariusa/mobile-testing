@@ -54,6 +54,23 @@ def _stub_words(ocr_mod, monkeypatch, words):
     monkeypatch.setattr(ocr_mod, "_load_words", lambda path, backend=None: entries)
 
 
+def test_load_words_is_memoized_per_screenshot(tmp_path, monkeypatch):
+    # validator + evidence both OCR the same after.png; Tesseract must run once.
+    img = render_text(str(tmp_path / "s.png"), ["Hello"])
+    calls = {"n": 0}
+    real = ocr._load_words_tesseract
+
+    def counting(path):
+        calls["n"] += 1
+        return real(path)
+
+    monkeypatch.setattr(ocr, "_load_words_tesseract", counting)
+    ocr._load_words_cached.cache_clear()
+    ocr.ocr_find(img, "Hello")
+    ocr.ocr_find(img, "Hello")
+    assert calls["n"] == 1
+
+
 def test_ocr_single_token_is_whole_word(monkeypatch):
     # 'ok' must not match inside 'Facebook' (the audit's OCR false PASS).
     _stub_words(ocr, monkeypatch, ["Facebook"])
