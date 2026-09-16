@@ -95,6 +95,19 @@ def test_happy_path_tuples_and_report(tmp_path):
     assert "Login" in html and "PASS" in html
 
 
+def test_auto_run_ids_do_not_collide(tmp_path):
+    # Two runs started back-to-back must not share a reports/<run_id>/ dir.
+    tc = {"name": "R", "package": "com.example.shop",
+          "steps": [{"action": "launch"}]}
+    screens = [FakeScreen("home", hierarchy_xml=hierarchy(node(text="Home")))]
+    d1 = FakeDevice(screens)
+    d2 = FakeDevice(screens)
+    r1 = runner.run(tc, d1, base_dir=str(tmp_path), sleep=NOSLEEP, settle_fn=NOSETTLE)
+    r2 = runner.run(tc, d2, base_dir=str(tmp_path), sleep=NOSLEEP, settle_fn=NOSETTLE)
+    assert r1["run_id"] != r2["run_id"]
+    assert r1["report_path"] != r2["report_path"]
+
+
 def test_numeric_assertion_value_does_not_crash_the_run(tmp_path):
     # A loader-valid numeric value (e.g. an order total) must yield a clean
     # verdict + a written report, never a traceback that discards the run.

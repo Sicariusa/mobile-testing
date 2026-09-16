@@ -14,6 +14,8 @@ a FakeDevice with no Android present.
 """
 from __future__ import annotations
 
+import binascii
+import os
 import time
 from datetime import datetime
 from typing import Any, Optional, Union
@@ -48,7 +50,7 @@ def run(testcase: Union[str, dict[str, Any]], device: Device, *,
     package = tc["package"]
     launch_activity = tc.get("launch_activity")
     data = tc.get("data", {})
-    run_id = run_id or datetime.now().strftime("%Y%m%d-%H%M%S")
+    run_id = run_id or _new_run_id()
 
     ev = Evidence(run_id, base_dir=base_dir)
     cache = SelectorCache(package)
@@ -127,6 +129,13 @@ def run(testcase: Union[str, dict[str, Any]], device: Device, *,
         "counts": counts,
         "results": results,
     }
+
+
+def _new_run_id() -> str:
+    """A per-run id that cannot collide when two runs start in the same second
+    (the old %Y%m%d-%H%M%S stamp let a second run overwrite the first's dir)."""
+    stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+    return f"{stamp}-{binascii.hexlify(os.urandom(2)).decode()}"
 
 
 def _run_assert(device: Device, assertion: dict[str, Any],
