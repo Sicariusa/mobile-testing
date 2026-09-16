@@ -43,17 +43,25 @@ def test_find_with_scroll_reveals_offscreen():
 
 
 def test_recovery_dismisses_keyboard():
-    # Keyboard covers the target on first look; pressing back reveals it.
+    # The target is genuinely unreachable while the keyboard is up; recovery must
+    # dismiss the keyboard and only then resolve it (the branch the old test never
+    # exercised — it resolved immediately and asserted nothing).
+    class KeyboardGatedDevice(FakeDevice):
+        def find(self, kind, value):
+            if self.cur.keyboard_visible:      # keyboard covers the control
+                return None
+            return super().find(kind, value)
+
     screen = FakeScreen("form", keyboard_visible=True, elements=(
         {"text": "Continue", "center": (100, 500), "goto": 0},
     ))
-    d = FakeDevice([screen])
-    # target only becomes reachable conceptually after keyboard dismissed;
-    # here the element exists but we assert the keyboard was dismissed in trace.
+    d = KeyboardGatedDevice([screen])
     res, trace = recovery.reach(d, {"text": "Continue"}, sleep=NOSLEEP)
     assert res is not None and res.found
-    methods = [a["method"] for a in trace.attempts]
-    assert "immediate" in methods
+    steps = [(a["method"], a["outcome"]) for a in trace.attempts]
+    assert ("dismiss_keyboard", "hidden") in steps        # the keyboard branch ran
+    assert ("post_keyboard", "resolved") in steps         # and it resolved after
+    assert d.cur.keyboard_visible is False                # keyboard actually gone
 
 
 def test_recovery_scroll_then_resolve():
