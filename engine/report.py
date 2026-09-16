@@ -7,6 +7,7 @@ OCR matches, and before/after thumbnails.
 """
 from __future__ import annotations
 
+import copy
 import html
 import json
 import os
@@ -42,12 +43,25 @@ def render(timeline: dict[str, Any], out_path: str) -> str:
         overall_color=overall_color,
         summary=html.escape(summary),
         cards=cards,
-        raw=html.escape(json.dumps(timeline, indent=2)),
+        raw=html.escape(json.dumps(_slim_timeline(timeline), indent=2)),
     )
     os.makedirs(os.path.dirname(os.path.abspath(out_path)), exist_ok=True)
     with open(out_path, "w", encoding="utf-8") as fh:
         fh.write(doc)
     return out_path
+
+
+def _slim_timeline(timeline: dict[str, Any]) -> dict[str, Any]:
+    """A copy of the timeline with each step's before/after hierarchy_xml removed
+    for the inlined raw block — the full dumps already live in timeline.json and
+    each steps/<n>/step.json, and inlining them thrice bloats the report."""
+    slim = copy.deepcopy(timeline)
+    for step in slim.get("steps", []):
+        for side in ("before", "after"):
+            obs = step.get(side)
+            if isinstance(obs, dict):
+                obs.pop("hierarchy_xml", None)
+    return slim
 
 
 def _step_card(step: dict[str, Any]) -> str:
