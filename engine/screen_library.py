@@ -24,6 +24,7 @@ from datetime import datetime
 from typing import Any, Optional
 
 from . import inspect as inspect_mod
+from .atomicio import write_json_atomic
 
 
 def _new_id() -> str:
@@ -174,12 +175,9 @@ class ScreenLibrary:
         return {"id": record.get("id"), "label": record.get("label"), "center": center}
 
     def save(self) -> None:
-        try:
-            os.makedirs(self.dir, exist_ok=True)
-            with open(self.path, "w", encoding="utf-8") as fh:
-                json.dump(self.data, fh, indent=2, ensure_ascii=False)
-        except OSError:
-            pass
+        # atomic write, and let a real IO failure propagate — a capture must not
+        # report success while nothing reached disk
+        write_json_atomic(self.path, self.data)
 
 
 def _element_from_dict(d: dict[str, Any]) -> inspect_mod.Element:

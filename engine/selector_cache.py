@@ -12,6 +12,8 @@ import os
 import re
 from typing import Any, Optional
 
+from .atomicio import write_json_atomic
+
 
 def norm_query(s: str) -> str:
     return re.sub(r"\s+", " ", (s or "").strip().lower())
@@ -42,9 +44,4 @@ class SelectorCache:
         return dict(self.data)
 
     def save(self) -> None:
-        try:
-            os.makedirs(os.path.dirname(self.path) or ".", exist_ok=True)
-            with open(self.path, "w", encoding="utf-8") as fh:
-                json.dump(self.data, fh, indent=2, ensure_ascii=False)
-        except OSError:
-            pass
+        write_json_atomic(self.path, self.data)
