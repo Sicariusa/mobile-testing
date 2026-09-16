@@ -2,8 +2,22 @@
 mutating action invalidates it. This is the Stage-1 speed win."""
 from __future__ import annotations
 
-from engine import config
+from engine import config, models
 from engine.device import AndroidDevice
+
+
+class _StubSelector:
+    """A u2 selector handle whose click()/set_text() mutate the screen — used to
+    drive a real _U2Element through the owner-invalidation wiring."""
+    def __init__(self, u2):
+        self._u2 = u2
+        self.exists = True
+
+    def click(self):
+        self._u2._xml = "<hierarchy><node text='clicked'/></hierarchy>"
+
+    def set_text(self, value):
+        self._u2._xml = "<hierarchy><node text='typed'/></hierarchy>"
 
 
 class StubU2:
@@ -11,6 +25,9 @@ class StubU2:
     def __init__(self):
         self.dumps = 0
         self._xml = "<hierarchy><node text='A'/></hierarchy>"
+
+    def __call__(self, **kwargs):
+        return _StubSelector(self)
 
     def dump_hierarchy(self):
         self.dumps += 1
@@ -61,9 +78,23 @@ def test_element_click_invalidates_via_owner():
     d = _dev()
     d.dump_hierarchy()               # prime the memo
     before = d._d.dumps
-    d.invalidate()                   # simulate what element.click() triggers
+    el = d.find(models.STRATEGY_TEXT_EXACT, "A")   # a REAL _U2Element owned by d
+    assert el is not None
+    el.click()                       # _sel.click() -> _touched() -> owner.invalidate()
     d.dump_hierarchy()
-    assert d._d.dumps == before + 1
+    assert d._d.dumps == before + 1  # memo was dropped, so a live re-dump happened
+    assert "clicked" in d.dump_hierarchy()   # and it reflects the post-click screen
+
+
+def test_element_set_text_invalidates_via_owner():
+    config.HIERARCHY_CACHE = True
+    d = _dev()
+    d.dump_hierarchy()
+    before = d._d.dumps
+    el = d.find(models.STRATEGY_RESOURCE_ID, "app:id/field")
+    el.set_text("hello")             # must invalidate the memo like click()
+    assert d._d.dumps == before      # set_text itself does not dump
+    assert "typed" in d.dump_hierarchy()   # next read is live, not the stale memo
 
 
 def test_cache_off_always_dumps():
