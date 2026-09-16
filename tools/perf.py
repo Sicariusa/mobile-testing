@@ -84,6 +84,29 @@ def check_rank_candidates_linear() -> Check:
                                                           role="tappable"))
 
 
+def _nested_hierarchy(n: int) -> str:
+    """Each item is a clickable row WRAPPING a non-clickable label, so a label
+    match must walk to its clickable ancestor — exercising the parent-chain walk
+    the flat fixture never hits."""
+    rows = "".join(
+        f'<node class="android.widget.LinearLayout" clickable="true" '
+        f'bounds="[0,{i * 40}][100,{i * 40 + 40}]">'
+        f'<node class="android.widget.TextView" text="Item {i}" clickable="false" '
+        f'bounds="[0,{i * 40}][100,{i * 40 + 40}]"/></node>'
+        for i in range(n))
+    return f'<hierarchy rotation="0">{rows}</hierarchy>'
+
+
+def check_rank_candidates_nested_linear() -> Check:
+    """rank_candidates stays ~linear even when every match must climb to a
+    clickable ancestor (the real list-row shape)."""
+    def make(n):
+        return ins.parse_elements(_nested_hierarchy(n))
+    return _scaling_check("rank_candidates (nested rows)", make,
+                          lambda els: ins.rank_candidates("Item 42", els,
+                                                          role="tappable"))
+
+
 def check_structural_fingerprint() -> Check:
     def make(n):
         return ins.parse_elements(_hierarchy(n))
@@ -110,6 +133,50 @@ class _StubU2:
     def send_keys(self, v): pass
     def press(self, k): pass
     def swipe(self, *a, **k): pass
+
+
+class _CountingU2(_StubU2):
+    """_StubU2 that also counts app_current round-trips."""
+    def __init__(self):
+        super().__init__()
+        self.app_current_calls = 0
+
+    def app_current(self):
+        self.app_current_calls += 1
+        return {"activity": ".Main", "package": "app"}
+
+
+class _AdbCountingDevice(AndroidDevice):
+    """AndroidDevice whose _adb is stubbed and counts keyboard dumpsys calls."""
+    def __init__(self):
+        super().__init__(_CountingU2(), serial="stub")
+        self.dumpsys_calls = 0
+
+    def _adb(self, *args, timeout=60):
+        if "dumpsys" in args or "input_method" in args:
+            self.dumpsys_calls += 1
+            return "mInputShown=false"
+        return ""
+
+
+def check_observe_round_trips_bounded() -> Check:
+    """One observation memoizes ALL its probes: K back-to-back observe() calls in
+    one screen state issue ONE dump, ONE app_current and ONE keyboard dumpsys —
+    catches a regression that leaks a per-observe app_current/keyboard round-trip."""
+    from engine.observation import observe
+    prev = config.HIERARCHY_CACHE
+    config.HIERARCHY_CACHE = True
+    try:
+        d = _AdbCountingDevice()
+        for _ in range(10):
+            observe(d)
+        u = d._d
+        ok = (u.dumps == 1 and u.app_current_calls == 1 and d.dumpsys_calls == 1)
+        return Check("observe round-trips (memoized)", ok,
+                     f"10 observes -> {u.dumps} dump, {u.app_current_calls} app_current, "
+                     f"{d.dumpsys_calls} keyboard dumpsys", "O(1)")
+    finally:
+        config.HIERARCHY_CACHE = prev
 
 
 def check_hierarchy_memo_o1() -> Check:
@@ -243,8 +310,10 @@ def check_run_smoke() -> Check:
 ALL_CHECKS = (
     check_run_smoke,
     check_hierarchy_memo_o1,
+    check_observe_round_trips_bounded,
     check_parse_elements_linear,
     check_rank_candidates_linear,
+    check_rank_candidates_nested_linear,
     check_structural_fingerprint,
     check_crawl_bounded,
 )
