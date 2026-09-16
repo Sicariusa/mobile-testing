@@ -49,6 +49,11 @@ class Element(ABC):
     @abstractmethod
     def click(self) -> None: ...
 
+    def long_click(self) -> None:
+        """Long-press this element. Default falls back to a tap; the live
+        adapter overrides it with a real long press."""
+        self.click()
+
     @abstractmethod
     def set_text(self, value: str) -> None: ...
 
@@ -109,6 +114,11 @@ class Device(ABC):
     @abstractmethod
     def tap_xy(self, x: int, y: int) -> None: ...
 
+    def long_click_xy(self, x: int, y: int) -> None:
+        """Long-press at coordinates. Default falls back to a tap; the live
+        adapter overrides it with a real long press."""
+        self.tap_xy(x, y)
+
     @abstractmethod
     def input_text(self, value: str) -> None:
         """Type into the currently focused field (used after an OCR tap)."""
@@ -137,6 +147,13 @@ class _U2Element(Element):
 
     def click(self) -> None:
         self._sel.click()
+        self._touched()
+
+    def long_click(self) -> None:
+        try:
+            self._sel.long_click()
+        except Exception:
+            self._sel.click()   # element handle without long_click support
         self._touched()
 
     def set_text(self, value: str) -> None:
@@ -277,6 +294,13 @@ class AndroidDevice(Device):
 
     def tap_xy(self, x: int, y: int) -> None:
         self._d.click(x, y)
+        self.invalidate()
+
+    def long_click_xy(self, x: int, y: int) -> None:
+        try:
+            self._d.long_click(x, y, config.LONG_PRESS_S)
+        except Exception:
+            self._d.click(x, y)
         self.invalidate()
 
     def input_text(self, value: str) -> None:

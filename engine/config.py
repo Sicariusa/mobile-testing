@@ -17,6 +17,9 @@ OCR_MIN_CONFIDENCE: float = 0.60
 # the chosen backend lazily, so importing it never requires the optional one.
 OCR_BACKEND: str = "tesseract"
 
+# --- Gestures ----------------------------------------------------------------
+LONG_PRESS_S: float = 0.8            # hold duration for a long_click gesture
+
 # --- Change detection --------------------------------------------------------
 # A "screen_changed" assertion passes when the before/after difference ratio
 # (hierarchy diff OR screenshot pixel diff, whichever is larger) meets this.

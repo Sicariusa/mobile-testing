@@ -220,9 +220,9 @@ def _perform(d: Device, action: str, res, value: Optional[str]) -> None:
             d.tap_xy(*res.coordinates)
     elif action == "long_click":
         if res.element is not None:
-            res.element.click()  # element long-click optional; click is the MVP
+            res.element.long_click()
         else:
-            d.tap_xy(*res.coordinates)
+            d.long_click_xy(*res.coordinates)
     elif action == "type":
         if value is None:
             raise ValueError("type requires a value")
