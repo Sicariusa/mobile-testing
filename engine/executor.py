@@ -52,7 +52,7 @@ def _hide_keyboard(d, sleep, visible: Optional[bool] = None) -> None:
         if visible is None:
             visible = d.keyboard_visible()
         if visible:
-            d.press_back()
+            d.hide_keyboard()
             sleep(0.3)
     except Exception:
         pass

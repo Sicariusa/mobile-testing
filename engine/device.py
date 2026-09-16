@@ -104,6 +104,12 @@ class Device(ABC):
     @abstractmethod
     def keyboard_visible(self) -> bool: ...
 
+    def hide_keyboard(self) -> None:
+        """Dismiss the soft keyboard without leaving the current screen. Default
+        falls back to press_back; the live adapter overrides it so a BACK press
+        cannot navigate off the screen under test."""
+        self.press_back()
+
     @abstractmethod
     def logcat_since_launch(self) -> str: ...
 
@@ -270,6 +276,15 @@ class AndroidDevice(Device):
         except DeviceError:
             return False
         return "mInputShown=true" in out
+
+    def hide_keyboard(self) -> None:
+        # ESCAPE (keycode 111) closes the IME but does NOT pop the activity the
+        # way BACK can, so it cannot navigate off the screen under test.
+        try:
+            self._adb("shell", "input", "keyevent", "111")
+        except DeviceError:
+            self._d.press("back")
+        self.invalidate()
 
     def logcat_since_launch(self) -> str:
         try:

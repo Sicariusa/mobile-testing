@@ -78,11 +78,12 @@ def reach(d: Device, target: dict[str, Any],
             break
         previous_screen = current_screen or previous_screen
 
-    # 3. dismiss keyboard if it's covering the target
+    # 3. dismiss keyboard if it's covering the target (non-navigating hide, so it
+    # cannot pop the screen under test the way a bare BACK can)
     if _safe(d.keyboard_visible):
         try:
-            d.press_back()
-            trace.record("dismiss_keyboard", "pressed_back")
+            d.hide_keyboard()
+            trace.record("dismiss_keyboard", "hidden")
         except Exception as exc:
             trace.record("dismiss_keyboard", "error", str(exc))
         res = _resolve(False)
