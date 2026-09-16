@@ -98,7 +98,7 @@ def validate(assertion: dict[str, Any], before: Observation, after: Observation,
             return ValidationOutcome(Status.PASS, models.VALIDATED_HIERARCHY, 1.0,
                                      detail=f"'{expected}' in hierarchy",
                                      expected=expected, actual=expected)
-        found, conf = _ocr(after, expected)
+        found, conf, ocr_ran = _ocr(after, expected)
         if found:
             return ValidationOutcome(Status.PASS, models.VALIDATED_OCR, conf,
                                      detail=f"'{expected}' via OCR",
@@ -109,7 +109,7 @@ def validate(assertion: dict[str, Any], before: Observation, after: Observation,
                                  observed_texts=_observed_texts(after, expected))
 
     if kind == "ocr_text_exists":
-        found, conf = _ocr(after, expected)
+        found, conf, ocr_ran = _ocr(after, expected)
         if found:
             return ValidationOutcome(Status.PASS, models.VALIDATED_OCR, conf,
                                      detail=f"'{expected}' via OCR",
@@ -158,12 +158,18 @@ def validate(assertion: dict[str, Any], before: Observation, after: Observation,
                                      detail=f"'{expected}' still in hierarchy",
                                      expected=exp, actual=f"'{expected}' still visible",
                                      observed_texts=_observed_texts(after, expected))
-        found, conf = _ocr(after, expected)
+        found, conf, ocr_ran = _ocr(after, expected)
         if found:
             return ValidationOutcome(Status.FAIL, models.VALIDATED_OCR, conf,
                                      detail=f"'{expected}' still visible (OCR)",
                                      expected=exp, actual=f"'{expected}' still visible",
                                      observed_texts=_observed_texts(after, expected))
+        if after.screenshot_path and not ocr_ran:
+            # a screenshot exists but OCR could not run — we cannot confirm the
+            # text is gone from the pixels, so do not silently PASS a negative
+            return ValidationOutcome(Status.FAIL, None, None,
+                                     detail=f"cannot confirm '{expected}' not visible: OCR unavailable",
+                                     expected=exp, actual="OCR unavailable")
         return ValidationOutcome(Status.PASS, models.VALIDATED_HIERARCHY, 1.0,
                                  detail=f"'{expected}' not visible",
                                  expected=exp, actual=exp)
@@ -252,13 +258,17 @@ def _activity_matches(activity: Optional[str], expected: Optional[str]) -> bool:
 
 
 # --- OCR + diff helpers ------------------------------------------------------
-def _ocr(after: Observation, expected: Optional[str]) -> tuple[bool, float]:
+def _ocr(after: Observation, expected: Optional[str]) -> tuple[bool, float, bool]:
+    """Returns ``(found, confidence, ran)``. ``ran`` is False when OCR could not
+    execute (no screenshot, or Tesseract/image error) — so a caller can tell
+    'OCR ran and saw nothing' apart from 'OCR never ran'."""
     if not after.screenshot_path or not expected:
-        return False, 0.0
+        return False, 0.0, False
     try:
-        return ocr_mod.ocr_text_exists(after.screenshot_path, expected, OCR_MIN_CONFIDENCE)
+        found, conf = ocr_mod.ocr_text_exists(after.screenshot_path, expected, OCR_MIN_CONFIDENCE)
+        return found, conf, True
     except Exception:
-        return False, 0.0
+        return False, 0.0, False
 
 
 def _hierarchy_diff(a: Optional[str], b: Optional[str]) -> float:
