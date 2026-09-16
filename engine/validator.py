@@ -261,9 +261,16 @@ def _ocr(after: Observation, expected: Optional[str]) -> tuple[bool, float]:
 
 def _hierarchy_diff(a: Optional[str], b: Optional[str]) -> float:
     a, b = a or "", b or ""
-    if not a and not b:
+    if a == b:                       # settle's hot path: identical dumps -> no diff
         return 0.0
-    return 1.0 - difflib.SequenceMatcher(None, a, b).ratio()
+    if not a or not b:
+        return 1.0
+    sm = difflib.SequenceMatcher(None, a, b, autojunk=True)
+    # SequenceMatcher.ratio() is O(len(a)*len(b)); on very large hierarchy dumps
+    # fall back to quick_ratio() (O(n)) to bound worst-case cost.
+    if len(a) + len(b) > 20000:
+        return 1.0 - sm.quick_ratio()
+    return 1.0 - sm.ratio()
 
 
 def _screenshot_diff(a: Optional[str], b: Optional[str]) -> Optional[float]:
