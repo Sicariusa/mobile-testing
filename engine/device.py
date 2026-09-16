@@ -197,16 +197,20 @@ class AndroidDevice(Device):
         self._d = u2_device
         self.serial = serial
         self._hier_cache: Optional[str] = None
-        self._act_cache: Optional[str] = None
         self._cache_valid = False
+        self._appcur_cache: Optional[dict] = None
+        self._appcur_valid = False
+        self._kbd_cache: Optional[bool] = None
         self._logcat_seen = 0
 
     def invalidate(self) -> None:
-        """Drop the memoized hierarchy/activity so the next read is live. Called
-        by every mutating action below."""
+        """Drop every memoized screen read so the next read is live. Called by
+        every mutating action below."""
         self._cache_valid = False
         self._hier_cache = None
-        self._act_cache = None
+        self._appcur_valid = False
+        self._appcur_cache = None
+        self._kbd_cache = None
 
     # -- adb plumbing ---------------------------------------------------------
     def _adb(self, *args: str, timeout: int = 60) -> str:
@@ -261,29 +265,38 @@ class AndroidDevice(Device):
             self._cache_valid = True
         return xml
 
-    def current_activity(self) -> Optional[str]:
-        if config.HIERARCHY_CACHE and self._cache_valid and self._act_cache is not None:
-            return self._act_cache
+    def _app_current(self) -> dict:
+        """One memoized ``app_current()`` per screen state — current_activity and
+        current_package share it, so a single observation no longer pays two
+        app_current round-trips for one dict."""
+        if config.HIERARCHY_CACHE and self._appcur_valid and self._appcur_cache is not None:
+            return self._appcur_cache
         try:
-            act = self._d.app_current().get("activity")
+            cur = self._d.app_current() or {}
         except Exception:
-            act = None
-        if config.HIERARCHY_CACHE and act is not None:
-            self._act_cache = act
-        return act
+            cur = {}
+        if config.HIERARCHY_CACHE:
+            self._appcur_cache = cur
+            self._appcur_valid = True
+        return cur
+
+    def current_activity(self) -> Optional[str]:
+        return self._app_current().get("activity")
 
     def current_package(self) -> Optional[str]:
-        try:
-            return self._d.app_current().get("package")
-        except Exception:
-            return None
+        return self._app_current().get("package")
 
     def keyboard_visible(self) -> bool:
+        if config.HIERARCHY_CACHE and self._kbd_cache is not None:
+            return self._kbd_cache
         try:
             out = self._adb("shell", "dumpsys", "input_method")
+            visible = "mInputShown=true" in out
         except DeviceError:
-            return False
-        return "mInputShown=true" in out
+            visible = False
+        if config.HIERARCHY_CACHE:
+            self._kbd_cache = visible
+        return visible
 
     def hide_keyboard(self) -> None:
         # ESCAPE (keycode 111) closes the IME but does NOT pop the activity the
