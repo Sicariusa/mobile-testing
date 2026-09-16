@@ -85,6 +85,12 @@ def _validate_step(step: Any, i: int, source: str) -> None:
         needs_value = atype in {"text_exists", "ocr_text_exists", "activity_is", "not_visible"}
         if needs_value and assertion.get("value") in (None, ""):
             raise TestCaseError(f"{where}: assert '{atype}' requires a 'value'")
+        # element_exists matches on id/text/desc, never 'value'; a lone 'value'
+        # would be accepted then always FAIL, so require a real selector here
+        if atype == "element_exists" and not (assertion.get("id") or assertion.get("text")
+                                              or assertion.get("desc")):
+            raise TestCaseError(f"{where}: assert 'element_exists' requires one of "
+                                f"'id', 'text' or 'desc'")
 
 
 def interpolate(value: Any, data: dict[str, Any]) -> Any:

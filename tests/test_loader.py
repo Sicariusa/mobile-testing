@@ -56,6 +56,19 @@ def test_unknown_assert_type_rejected():
         loader.validate(bad)
 
 
+def test_element_exists_requires_a_selector():
+    bad = {"name": "t", "package": "p",
+           "steps": [{"assert": {"type": "element_exists", "value": "Login"}}]}
+    with pytest.raises(TestCaseError):
+        loader.validate(bad)
+
+
+def test_element_exists_with_selector_passes():
+    ok = {"name": "t", "package": "p",
+          "steps": [{"assert": {"type": "element_exists", "id": "app:id/login"}}]}
+    assert loader.validate(ok)["name"] == "t"
+
+
 def test_loads_sample_login_yaml():
     tc = loader.load_testcase("testcases/login.yaml")
     assert tc["package"] == "com.example.shop"
