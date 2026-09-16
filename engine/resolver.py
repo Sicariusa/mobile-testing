@@ -141,8 +141,12 @@ def resolve(d: Device, target: dict[str, Any], *,
 
     # 3. inventory candidate ranking (label → element)
     if query and elements:
-        cands = inspect_mod.rank_candidates(query, elements, role=role)
-        result.candidates = [c.as_dict() for c in cands]
+        # rank the FULL set: role/base acceptance below is what selects, so a
+        # correct-role target must not be truncated out by higher-scoring
+        # wrong-role elements before the filter ever sees it
+        cands = inspect_mod.rank_candidates(query, elements, role=role,
+                                            limit=len(elements) or 5)
+        result.candidates = [c.as_dict() for c in cands[:8]]
         rejected = [c for c in cands if c.base >= RESOLVE_MIN_SCORE
                     and not _role_ok(c.element, role)]
         if rejected:

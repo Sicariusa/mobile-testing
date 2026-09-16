@@ -28,6 +28,22 @@ def _login_device():
                                   elements=LOGIN_ELEMENTS)])
 
 
+def test_rank_keeps_role_fit_target_among_many_wrong_role():
+    # 5 non-clickable exact 'Submit' labels + one clickable fuzzy match. Ranking
+    # the full set must retain the clickable one; a fixed cap of 5 drops it,
+    # which is why the resolver now requests the full list (audit D5).
+    labels = "".join(f"<node class='TextView' text='Submit' bounds='[0,{i*50}][100,{i*50+40}]'/>"
+                     for i in range(5))
+    button = ("<node class='Button' text='Sbmit form' clickable='true' "
+              "bounds='[0,500][100,560]'/>")
+    xml = f"<hierarchy><node class='FrameLayout'>{labels}{button}</node></hierarchy>"
+    els = I.parse_elements(xml)
+    full = I.rank_candidates("Submit", els, role="tappable", limit=len(els))
+    truncated = I.rank_candidates("Submit", els, role="tappable", limit=5)
+    assert any(c.element.clickable for c in full)          # retained in the full list
+    assert not any(c.element.clickable for c in truncated)  # dropped by the old fixed cap
+
+
 def _fp():
     return I.structural_fingerprint("com.example.shop/.MainActivity",
                                     I.parse_elements(LOGIN_XML))
