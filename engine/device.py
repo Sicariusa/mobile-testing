@@ -113,6 +113,12 @@ class Device(ABC):
     @abstractmethod
     def logcat_since_launch(self) -> str: ...
 
+    def logcat_new(self) -> str:
+        """Lines added since the last call — used by the per-step crash gate so
+        old lines are not re-scanned every step. Default returns the full buffer;
+        the live adapter tracks an offset."""
+        return self.logcat_since_launch()
+
     # --- interaction ---------------------------------------------------------
     @abstractmethod
     def find(self, kind: str, value: str) -> Optional[Element]: ...
@@ -193,6 +199,7 @@ class AndroidDevice(Device):
         self._hier_cache: Optional[str] = None
         self._act_cache: Optional[str] = None
         self._cache_valid = False
+        self._logcat_seen = 0
 
     def invalidate(self) -> None:
         """Drop the memoized hierarchy/activity so the next read is live. Called
@@ -225,6 +232,7 @@ class AndroidDevice(Device):
             self._adb("logcat", "-c")
         except DeviceError:
             pass
+        self._logcat_seen = 0
         self._d.app_start(package, activity, stop=True)
         self.invalidate()
 
@@ -291,6 +299,14 @@ class AndroidDevice(Device):
             return self._adb("logcat", "-d")
         except DeviceError:
             return ""
+
+    def logcat_new(self) -> str:
+        """Only the lines produced since the previous call, so the crash gate
+        does not re-scan (or re-report) the whole buffer every step."""
+        lines = self.logcat_since_launch().splitlines()
+        new = lines[self._logcat_seen:]
+        self._logcat_seen = len(lines)
+        return "\n".join(new)
 
     # -- interaction ----------------------------------------------------------
     def find(self, kind: str, value: str) -> Optional[Element]:
