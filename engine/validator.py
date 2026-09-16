@@ -88,6 +88,8 @@ def validate(assertion: dict[str, Any], before: Observation, after: Observation,
 
     kind = assertion.get("type")
     expected = assertion.get("value")
+    if expected is not None and not isinstance(expected, str):
+        expected = str(expected)          # a numeric YAML value must not crash validation
     match_mode = assertion.get("match") or "word"
 
     if kind == "text_exists":

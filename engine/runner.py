@@ -76,20 +76,29 @@ def run(testcase: Union[str, dict[str, Any]], device: Device, *,
             ev.save_step(i, res)
             continue
 
-        if "assert" in step:
-            res = _run_assert(device, step["assert"], last_before, last_after,
-                              after_path, _safe_logcat(device))
-        else:
-            res = executor_mod.execute(
-                device, step, data=data, package=package,
-                launch_activity=launch_activity,
-                before_path=before_path, after_path=after_path,
-                sleep=sleep, cache=cache, library=library, **settle_kwargs,
+        try:
+            if "assert" in step:
+                res = _run_assert(device, step["assert"], last_before, last_after,
+                                  after_path, _safe_logcat(device))
+            else:
+                res = executor_mod.execute(
+                    device, step, data=data, package=package,
+                    launch_activity=launch_activity,
+                    before_path=before_path, after_path=after_path,
+                    sleep=sleep, cache=cache, library=library, **settle_kwargs,
+                )
+                if res.before is not None:
+                    last_before = res.before
+                if res.after is not None:
+                    last_after = res.after
+        except Exception as exc:
+            # An unexpected error in one step must never discard the whole run's
+            # report/evidence — record it as a FAIL and carry on.
+            res = ActionResult(
+                status=Status.FAIL, action=_step_name(step),
+                target=step.get("target"), detail="unexpected error in step",
+                error=str(exc), failure_reason=FailureReason.DEVICE_ERROR,
             )
-            if res.before is not None:
-                last_before = res.before
-            if res.after is not None:
-                last_after = res.after
 
         results.append(res)
         ev.save_step(i, res)

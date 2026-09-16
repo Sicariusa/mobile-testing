@@ -95,6 +95,24 @@ def test_happy_path_tuples_and_report(tmp_path):
     assert "Login" in html and "PASS" in html
 
 
+def test_numeric_assertion_value_does_not_crash_the_run(tmp_path):
+    # A loader-valid numeric value (e.g. an order total) must yield a clean
+    # verdict + a written report, never a traceback that discards the run.
+    tc = {
+        "name": "Numeric", "package": "com.example.shop",
+        "steps": [
+            {"action": "launch"},
+            {"assert": {"type": "text_exists", "value": 100}},
+        ],
+    }
+    screens = [FakeScreen("home", hierarchy_xml=hierarchy(node(text="Total: 42")))]
+    d, result = _run(tc, screens, tmp_path)
+    assert os.path.exists(result["report_path"])
+    assert os.path.exists(result["timeline_path"])
+    statuses = [r.status for r in result["results"]]
+    assert Status.FAIL in statuses  # graded, not crashed
+
+
 def test_text_exists_satisfied_only_by_ocr(tmp_path):
     # success screen whose hierarchy does NOT contain the word, only the pixels
     screens = _login_screens()
