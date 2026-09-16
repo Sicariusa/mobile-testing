@@ -34,6 +34,13 @@ def test_screen_library_save_is_atomic(tmp_path):
     assert any(s["id"] == "scr_x" for s in reloaded.screens())
 
 
+def test_screen_library_package_cannot_escape_base_dir(tmp_path):
+    base = tmp_path / "screens"
+    lib = ScreenLibrary("..", base_dir=str(base))
+    resolved = os.path.realpath(lib.dir)
+    assert resolved.startswith(os.path.realpath(str(base)))
+
+
 def test_safe_dirname_rejects_parent_escape():
     assert atomicio.safe_dirname("..") == "app"
     assert atomicio.safe_dirname(".") == "app"

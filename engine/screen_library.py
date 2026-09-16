@@ -18,13 +18,12 @@ from __future__ import annotations
 
 import json
 import os
-import re
 import uuid
 from datetime import datetime
 from typing import Any, Optional
 
 from . import inspect as inspect_mod
-from .atomicio import write_json_atomic
+from .atomicio import safe_dirname, write_json_atomic
 
 
 def _new_id() -> str:
@@ -37,7 +36,7 @@ def _now() -> str:
 
 class ScreenLibrary:
     def __init__(self, package: str, base_dir: str = "screens"):
-        safe = re.sub(r"[^A-Za-z0-9_.-]", "_", package or "app")
+        safe = safe_dirname(package)
         self.package = package
         self.dir = os.path.join(base_dir, safe)
         self.path = os.path.join(self.dir, "library.json")

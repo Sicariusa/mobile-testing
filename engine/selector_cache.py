@@ -12,7 +12,7 @@ import os
 import re
 from typing import Any, Optional
 
-from .atomicio import write_json_atomic
+from .atomicio import safe_dirname, write_json_atomic
 
 
 def norm_query(s: str) -> str:
@@ -21,7 +21,7 @@ def norm_query(s: str) -> str:
 
 class SelectorCache:
     def __init__(self, package: str, base_dir: str = ".selector-cache"):
-        safe = re.sub(r"[^A-Za-z0-9_.-]", "_", package or "app")
+        safe = safe_dirname(package)
         self.path = os.path.join(base_dir, f"{safe}.json")
         self.data: dict[str, Any] = {}
         try:
