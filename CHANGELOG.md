@@ -3,6 +3,80 @@
 All notable changes to the mobile-testing engine are documented here.
 Format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [Unreleased] — Adversarial audit: verified fixes + live-safe reverts
+
+A full-repository, multi-agent **adversarial audit** (29 verified findings, health
+54/100 — report in [`docs/audit/`](docs/audit/AUDIT-2026-09-16.md)) followed by a
+round of fixes. Several fixes were then **reverted** because they changed
+real-device behaviour and only the FakeDevice suite validated them — see
+[`docs/audit/AUDIT-AND-FIXES.md`](docs/audit/AUDIT-AND-FIXES.md) for the full
+story. Net effect: `main`'s live behaviour is preserved; only result-neutral
+improvements ship, plus the two false-verdict fixes as **opt-in**.
+
+### Added / Fixed (result-neutral — kept)
+
+- **Report no longer inlines full hierarchy XML** (`engine/report.py`) — the raw
+  timeline block strips each step's before/after `hierarchy_xml` (still persisted
+  in `timeline.json` and every `step.json`), so a large-tree report no longer
+  balloons to multiple MB. Also: header counts use `.get('status', …)` so one
+  malformed step can't `KeyError` the whole report; point-in-time assertions no
+  longer render a fabricated duplicate "before" thumbnail.
+- **Collision-proof `run_id`** (`engine/runner.py`) — a short random suffix is
+  appended to the timestamp, so two runs starting in the same second (threaded
+  webapp, double-clicked Run, fast batches) no longer overwrite each other's
+  `reports/<run_id>/`.
+- **Atomic library / selector-cache writes** (`engine/atomicio.py`, new;
+  `screen_library.py`, `selector_cache.py`) — saves go through a temp file +
+  `os.replace`, so a crash or concurrent reader never sees a half-written file;
+  IO errors are still swallowed so a transient failure can't abort a run. The
+  package sanitiser now rejects `.`/`..` so a request-controlled package can't
+  point the store outside its directory.
+- **Loader rejects an unusable `element_exists`** (`engine/loader.py`) — an
+  assertion with only `value` (never matched by the validator) is now rejected up
+  front instead of always FAILing at run time; use `id`/`text`/`desc`.
+- **Resolver ranks the full candidate set** (`engine/resolver.py`) — a
+  correct-role target is no longer truncated out of the top-5 by higher-scoring
+  wrong-role elements before the role/base filter runs.
+- **Real `long_click`** (`engine/device.py`, `engine/executor.py`) — a `long_click`
+  action performs an actual long press (u2 `long_click`, coordinate fallback)
+  instead of a silent short tap.
+- **Per-screenshot OCR memoisation** (`engine/ocr.py`) — `_load_words` is memoised
+  by `(path, mtime)`, and assertion OCR evidence is only collected when OCR is
+  relevant, so a `text_exists` satisfied by the hierarchy no longer pays a full
+  Tesseract pass.
+- **Opt-in strict text matching** (`engine/validator.py`) — `text_exists` /
+  `not_visible` accept `match: word` (whole-word / contiguous-token) or
+  `match: exact`; the **default stays `contains`** (substring), so existing test
+  cases are unchanged. `activity_is` now matches on a component boundary
+  (`.HomeActivity` matches a fully-qualified name; a bare token in a longer
+  activity does not). A numeric assertion `value` is coerced to a string instead
+  of crashing, and an unexpected error in a step is caught so the run still writes
+  its report.
+
+### Reverted (behaviour changes that broke live runs)
+
+These audit fixes passed 150+ FakeDevice tests but changed real-device behaviour;
+reverted to match `main` after a live run surfaced the breakage:
+
+- **Keyboard dismissal** kept as **BACK** (an attempt to use ESCAPE / keyevent 111
+  left the soft keyboard up on real IMEs, covering the target on every
+  type→tap flow).
+- **`settle()`** kept responsive (an added pre-action-baseline wait + two-stable-
+  pair requirement stalled live runs up to ~timeout/2 per step). Kept only the
+  safe guard that a failed dump is never treated as settled.
+- **Whole-word text/OCR matching** made **opt-in** rather than the default;
+  `not_visible` no longer FAILs when OCR can't run; per-step crash gate kept as a
+  full logcat scan; hierarchy diff kept as the full ratio.
+
+### Verified live
+
+Add-to-cart flow run on a real emulator on **both branches** → identical
+**PASS 14/14** (incl. the type→submit keyboard step). Every web-panel feature
+(env, launch, capture, screens, preflight, run, reports, static serving) driven
+through the UI and over HTTP → identical on both branches. Auto-crawl excluded
+(pre-existing, unrelated to this work).
+
+
 ## [Unreleased] — Speed, screen library, web panel
 
 Follow-up round: make runs fast, add a pre-fetched screen library, and a local
