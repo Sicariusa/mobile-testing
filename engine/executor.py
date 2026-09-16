@@ -41,11 +41,17 @@ def _norm_target(target):
     return target
 
 
-def _hide_keyboard(d, sleep) -> None:
+def _hide_keyboard(d, sleep, visible: Optional[bool] = None) -> None:
     """Dismiss an open keyboard before a tap/submit: it obscures buttons and its
-    IME action key (Next/Done/Go) would otherwise win the submit ranking."""
+    IME action key (Next/Done/Go) would otherwise win the submit ranking.
+
+    ``visible`` lets the caller pass the keyboard state it already observed this
+    step so we don't pay a second ``dumpsys input_method`` round-trip.
+    """
     try:
-        if d.keyboard_visible():
+        if visible is None:
+            visible = d.keyboard_visible()
+        if visible:
             d.press_back()
             sleep(0.3)
     except Exception:
@@ -134,7 +140,7 @@ def execute(d: Device, step: dict[str, Any], *,
             detail = f"launched {package}"
         elif action in TARGETED_ACTIONS or action == "submit":
             if action in ("tap", "submit", "long_click"):
-                _hide_keyboard(d, sleep)
+                _hide_keyboard(d, sleep, before.keyboard_visible)
             if action == "submit":
                 res, recovery = _resolve_submit(d, target, cache, sleep, library)
             else:
