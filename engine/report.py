@@ -30,7 +30,8 @@ def render(timeline: dict[str, Any], out_path: str) -> str:
 
     counts: dict[str, int] = {}
     for s in steps:
-        counts[s["status"]] = counts.get(s["status"], 0) + 1
+        key = s.get("status", "UNKNOWN")
+        counts[key] = counts.get(key, 0) + 1
     summary = " · ".join(f"{k}: {v}" for k, v in counts.items()) or "no steps"
 
     doc = _TEMPLATE.format(
