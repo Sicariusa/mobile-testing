@@ -184,13 +184,13 @@ def crawl(device: Device, package: str, library: ScreenLibrary, *,
         """Enumerate every safe candidate on this screen — visible AND below the
         fold — without tapping, recording each one's priority. Notes destructive
         controls in passing, then returns the screen to the top."""
-        found: dict[tuple, int] = {}
+        found: dict[tuple, tuple[int, int]] = {}
         obs, scrolls = entry_obs, 0
         while True:
             _note_destructive(obs)
             for e in obs.elements():
                 if _tappable(e):
-                    found.setdefault(_signature(e), _priority(e))
+                    found.setdefault(_signature(e), (_priority(e), scrolls))
             if scrolls >= CRAWL_MAX_SCROLLS_PER_SCREEN or not _scroll_changed(obs):
                 break
             scrolls += 1
@@ -200,11 +200,13 @@ def crawl(device: Device, package: str, library: ScreenLibrary, *,
             obs = nxt
         if scrolls:
             _scroll_to_top()
-        return [{"sig": s, "priority": p} for s, p in found.items()]
+        return [{"sig": s, "priority": p, "depth": d} for s, (p, d) in found.items()]
 
-    def _bring_into_view(sig: tuple):
+    def _bring_into_view(sig: tuple, hint_depth: Optional[int] = None):
         """Scroll from the top until an element with this signature is on screen;
-        return it (fresh coordinates) or None if it can't be reached."""
+        return it (fresh coordinates) or None if it can't be reached. A candidate
+        gathered above the fold (``hint_depth == 0``) is only looked for on the
+        current screen — no scroll passes are spent chasing it."""
         scrolls = 0
         while True:
             here = _in_app()
@@ -213,6 +215,8 @@ def crawl(device: Device, package: str, library: ScreenLibrary, *,
             for e in here.elements():
                 if _signature(e) == sig:
                     return e
+            if hint_depth == 0:
+                return None
             if scrolls >= CRAWL_MAX_SCROLLS_PER_SCREEN or not _scroll_changed(here):
                 return None
             scrolls += 1
@@ -245,7 +249,7 @@ def crawl(device: Device, package: str, library: ScreenLibrary, *,
             if sig in tried:
                 continue
             tried.add(sig)
-            el = _bring_into_view(sig)              # scroll it into view for fresh coords
+            el = _bring_into_view(sig, cand.get("depth"))   # fresh coords; skip scroll if above fold
             if el is None:
                 continue
             here = _in_app()
