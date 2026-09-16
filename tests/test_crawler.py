@@ -383,3 +383,55 @@ def test_crawl_does_not_escape_to_the_launcher(tmp_path):
     assert s["captured"][0]["activity"] == ".Root"
     assert all(c["activity"] != ".Launcher" for c in s["captured"])
     assert dev.at_launcher is False   # a no-nav tap must not have pressed Back
+
+
+# --- C3: Back that preserves scroll must not abandon remaining candidates ------
+_HDR = '<node class="TV" resource-id="hdr" text="Product" bounds="[0,0][1080,200]"/>'
+_BTN_A = ('<node class="Button" resource-id="btnA" text="OPEN A" clickable="true" '
+          'enabled="true" bounds="[0,1000][1080,1160]"/>')
+_BTN_B = ('<node class="Button" resource-id="btnB" text="OPEN B" clickable="true" '
+          'enabled="true" bounds="[0,1000][1080,1160]"/>')
+
+
+def _prod_scroll(scroll):
+    body = _HDR + (_BTN_A if scroll == 1 else _BTN_B if scroll >= 2 else "")
+    return (f'<hierarchy><node class="Scroll" scrollable="true" '
+            f'bounds="[0,0][1080,2000]">{body}</node></hierarchy>')
+
+
+class BackKeepsScrollDevice:
+    """Two controls live below the fold at different scroll depths, each opening a
+    distinct child; Back restores the product at the scroll position it was tapped
+    (a real RecyclerView), so the returned fingerprint differs from the top."""
+    def __init__(self):
+        self.screen, self.scroll = "prod", 0
+
+    def launch(self, p, a=None): self.screen, self.scroll = "prod", 0
+    def current_package(self): return "com.demo"
+    def current_activity(self): return "." + self.screen
+    def dump_hierarchy(self):
+        return _prod_scroll(self.scroll) if self.screen == "prod" else \
+            f'<hierarchy><node class="V" text="{self.screen}" bounds="[0,0][100,50]"/></hierarchy>'
+    def keyboard_visible(self): return False
+    def screenshot(self, path): return path
+    def tap_xy(self, x, y):
+        if self.screen == "prod" and (x, y) == (540, 1080):
+            if self.scroll == 1: self.screen = "childA"
+            elif self.scroll >= 2: self.screen = "childB"
+    def scroll_forward(self):
+        if self.screen == "prod" and self.scroll < 2: self.scroll += 1
+    def swipe(self, *a, **k):
+        if self.screen == "prod" and self.scroll > 0: self.scroll -= 1
+    def press_back(self):
+        if self.screen == "childA": self.screen, self.scroll = "prod", 1
+        elif self.screen == "childB": self.screen, self.scroll = "prod", 2
+    def invalidate(self): pass
+
+
+def test_back_preserving_scroll_does_not_abandon_remaining_candidates(tmp_path):
+    dev = BackKeepsScrollDevice()
+    lib = ScreenLibrary("com.demo", base_dir=str(tmp_path))
+    s = crawl(dev, "com.demo", lib, max_screens=5, launch=False, screenshots=False,
+              sleep=lambda *_: None, settle_fn=lambda *a, **k: True)
+    acts = [c["activity"] for c in s["captured"]]
+    assert ".childA" in acts and ".childB" in acts   # neither below-fold action abandoned

@@ -130,13 +130,23 @@ def crawl(device: Device, package: str, library: ScreenLibrary, *,
             return None
         return obs
 
-    def _return(expected_fp: str) -> bool:
-        """Back once, settle, and report whether we are back in the app on the
-        screen we expected. A Back that escapes the app (or overshoots) is a
-        stop signal — never keep tapping stale coordinates."""
+    def _return_to_entry(top_fp: str, pre_fp: str) -> bool:
+        """Back once, settle, and report whether we are back on this screen. Back
+        typically restores the parent at its previous scroll position, so accept
+        EITHER the top fingerprint or the pre-tap (possibly scrolled) one; when we
+        return scrolled, reset to the top so the next candidate still resolves. A
+        Back that escapes the app is a stop signal — never tap stale coordinates."""
         _back(device, settle_fn)
         obs = _in_app()
-        return obs is not None and obs.structural_fingerprint() == expected_fp
+        if obs is None:
+            return False
+        cur = obs.structural_fingerprint()
+        if cur == top_fp:
+            return True
+        if cur == pre_fp:
+            _scroll_to_top()
+            return True
+        return False
 
     def _note_destructive(obs) -> None:
         for e in obs.elements():
@@ -252,20 +262,20 @@ def crawl(device: Device, package: str, library: ScreenLibrary, *,
             after_fp = after.structural_fingerprint()
 
             if after.package and package and after.package != package:
-                if not _return(fp):                 # left the app — come back to entry
+                if not _return_to_entry(fp, pre_fp):   # left the app — come back to entry
                     break
                 continue
             if after_fp == pre_fp:
                 continue                            # tap changed nothing → NO Back (root-safe)
             if after_fp in visited:
-                if not _return(fp):
+                if not _return_to_entry(fp, pre_fp):
                     break
                 continue
 
             _explore(depth + 1)                     # captures the new screen/state
             # Return to THIS screen at its entry state; if Back overshoots or
             # leaves the app, stop — never keep scanning a different screen.
-            if not _return(fp):
+            if not _return_to_entry(fp, pre_fp):
                 break
 
     _explore(0)
