@@ -78,3 +78,40 @@ def test_screen_changed_thresholds():
 def test_change_ratio_identical_is_zero():
     obs = _obs(hierarchy(node(text="same")))
     assert validator.change_ratio(obs, obs) == 0.0
+
+
+def test_text_exists_word_boundary_no_false_pass():
+    # 'Success' must NOT match inside 'Unsuccessful' (the audit's false PASS).
+    after = _obs(hierarchy(node(text="Unsuccessful")))
+    out = validator.validate({"type": "text_exists", "value": "Success"}, after, after)
+    assert out.status is Status.FAIL
+
+
+def test_text_exists_phrase_as_whole_words():
+    after = _obs(hierarchy(node(text="Payment was Successful")))
+    out = validator.validate({"type": "text_exists", "value": "Successful"}, after, after)
+    assert out.status is Status.PASS
+
+
+def test_not_visible_word_boundary_no_false_fail():
+    # 'Cart' as a substring of 'Carthage' must not keep not_visible FAILing.
+    after = _obs(hierarchy(node(text="Carthage ruins")))
+    out = validator.validate({"type": "not_visible", "value": "Cart"}, after, after)
+    assert out.status is Status.PASS
+
+
+def test_text_exists_contains_mode_is_opt_in():
+    after = _obs(hierarchy(node(text="Unsuccessful")))
+    out = validator.validate({"type": "text_exists", "value": "success", "match": "contains"},
+                             after, after)
+    assert out.status is Status.PASS
+
+
+def test_text_exists_exact_mode():
+    after = _obs(hierarchy(node(text="Welcome, Sam")))
+    loose = validator.validate({"type": "text_exists", "value": "Welcome", "match": "exact"},
+                               after, after)
+    assert loose.status is Status.FAIL
+    tight = validator.validate({"type": "text_exists", "value": "Welcome, Sam", "match": "exact"},
+                               after, after)
+    assert tight.status is Status.PASS

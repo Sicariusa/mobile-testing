@@ -18,6 +18,7 @@ landing on an error screen changes the screen but is not a successful login.)
 from __future__ import annotations
 
 import difflib
+import re
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass, field
 from typing import Any, Optional
@@ -87,10 +88,11 @@ def validate(assertion: dict[str, Any], before: Observation, after: Observation,
 
     kind = assertion.get("type")
     expected = assertion.get("value")
+    match_mode = assertion.get("match") or "word"
 
     if kind == "text_exists":
         # hierarchy first (fast, exact), then OCR (visual text the tree missed)
-        if _hierarchy_has_text(after.hierarchy_xml, expected):
+        if _hierarchy_has_text(after.hierarchy_xml, expected, match_mode):
             return ValidationOutcome(Status.PASS, models.VALIDATED_HIERARCHY, 1.0,
                                      detail=f"'{expected}' in hierarchy",
                                      expected=expected, actual=expected)
@@ -149,7 +151,7 @@ def validate(assertion: dict[str, Any], before: Observation, after: Observation,
     if kind == "not_visible":
         # inverse of text_exists — the string must be gone from tree AND screen
         exp = f"'{expected}' not visible"
-        if _hierarchy_has_text(after.hierarchy_xml, expected):
+        if _hierarchy_has_text(after.hierarchy_xml, expected, match_mode):
             return ValidationOutcome(Status.FAIL, models.VALIDATED_HIERARCHY, 1.0,
                                      detail=f"'{expected}' still in hierarchy",
                                      expected=exp, actual=f"'{expected}' still visible",
@@ -179,12 +181,37 @@ def validate(assertion: dict[str, Any], before: Observation, after: Observation,
 
 
 # --- hierarchy helpers -------------------------------------------------------
-def _hierarchy_has_text(xml: Optional[str], expected: Optional[str]) -> bool:
+def _text_matches(haystack: str, want: str, mode: str) -> bool:
+    """Whether ``want`` is present in ``haystack`` under ``mode``.
+
+    ``word`` (default) requires ``want`` to appear as a contiguous run of whole
+    words, so 'ok' never matches inside 'Facebook' and 'Success' never matches
+    'Unsuccessful'. ``exact`` requires the full normalised value to be equal;
+    ``contains`` is the old raw-substring behaviour, opt-in only.
+    """
+    h = re.sub(r"\s+", " ", haystack or "").strip().lower()
+    w = re.sub(r"\s+", " ", want or "").strip().lower()
+    if not w:
+        return False
+    if mode == "contains":
+        return w in h
+    if mode == "exact":
+        return h == w
+    h_tokens = re.findall(r"\w+", h, flags=re.UNICODE)
+    w_tokens = re.findall(r"\w+", w, flags=re.UNICODE)
+    if not w_tokens:                       # want was pure punctuation
+        return w in h
+    span = len(w_tokens)
+    return any(h_tokens[i:i + span] == w_tokens
+               for i in range(0, len(h_tokens) - span + 1))
+
+
+def _hierarchy_has_text(xml: Optional[str], expected: Optional[str],
+                        mode: str = "word") -> bool:
     if not xml or not expected:
         return False
-    want = expected.strip().lower()
     for text in Observation(timestamp=0, hierarchy_xml=xml).texts():
-        if want in text.lower():
+        if _text_matches(text, str(expected), mode):
             return True
     return False
 
