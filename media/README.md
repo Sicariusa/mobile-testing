@@ -7,7 +7,7 @@ how the engine works.
 
 | | format | length | file |
 |---|---|---|---|
-| **Wide** (landscape / embeds) | 1920×1080 · 16:9 | ~60s | `mobile-qa-showcase.mp4` |
+| **Wide** (landscape / embeds) | 1920×1080 · 16:9 | ~38s | `mobile-qa-showcase.mp4` |
 | **Vertical** (TikTok / Reels / Shorts) | 1080×1920 · 9:16 | ~43s | `mobile-qa-showcase-vertical.mp4` |
 
 ![poster](mobile-qa-showcase-poster.png)
@@ -15,20 +15,21 @@ how the engine works.
 Both are H.264 (yuv420p, faststart) and play everywhere. Posters:
 `mobile-qa-showcase-poster.png`, `mobile-qa-showcase-vertical-poster.png`.
 
-## Wide cut — the full story
+## Wide cut — short & QA-focused
 
-1. Title — *"Automated testing that drives your app the way people do."*
-2. **Preflight** — *"Maps your app first."* Every screen explored and **captured**
-   before a single test runs.
-3. A phone **journey** across Login → Products → Checkout, captions swapping:
-   - *It drives your whole app* (taps, types, swipes)
-   - *Finds every control. Reads every label.*
-   - *Something in the way? It finds another.* (an obstruction clears)
-   - *Every step, captured as proof.* (before / after)
-4. **Test Report** — real **PASS / FAIL** test cases, a pass-rate ring, and the
-   failed case expanded to a defect detail
+A tight ~38s cut built around the QA story: automated test cases and a pass/fail
+report.
+
+1. **Hook** — *"Test cases that run themselves."*
+2. **Automated run** — 5 test cases execute on their own (no taps), stamping
+   **PASS / PASS / PASS / FAIL / PASS** while the app is driven in a phone beside
+   the runner.
+3. **Report** — **4 Passed / 1 Failed**, an 80% pass-rate ring, and the failed
+   case expanded to a defect detail
    (*Expected "Order placed" ✓ / Got "Payment declined" ✕*).
-5. Close — Automatic · Resilient · Proof for every step.
+4. Close — Automated · Resilient · Pass / fail proof.
+
+The runner and the report use the same five cases, so the numbers line up.
 
 ## Vertical cut
 
