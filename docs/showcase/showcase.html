@@ -6,22 +6,28 @@
 <title>Mobile QA Test Runner — Showcase</title>
 <style>
 /* ============================================================
-   MOBILE QA TEST RUNNER — wide (16:9), short QA-focused cut (~35s).
-   A hook, then automated test cases running to PASS/FAIL, then the
-   report. Benefit/QA-led — no engine internals.
+   MOBILE QA TEST RUNNER — wide (16:9), for QA teams. ~41s.
+   Hook -> the suite runs itself (phone strictly aligned to the
+   running case) -> every screen captured -> pass/fail report.
    Deterministic, time-based CSS timeline keyed off body.play.
-   Timeline (seconds):
-     S1 Hook         0.0 –  3.8
-     S2 Auto-run     3.8 – 17.0   (test cases execute automatically)
-     S3 Report      17.0 – 28.8   (PASS / FAIL)
-     S4 Close       28.8 – 34.8
+
+   LAYOUT NOTE (used by tools/measure_events.py): in S2 the runner
+   card is absolutely positioned, so each PASS/FAIL chip sits at a
+   known rect — row i top = 470 + (i-1)*64, status cell x = 339.
+
+   Timeline (animation seconds):
+     S1 Hook       0.0 –  4.4
+     S2 Run        4.4 – 19.8   cases finish at 7.7/10.1/12.3/15.2/17.5
+     S3 Capture   19.8 – 25.8
+     S4 Report    25.8 – 35.8
+     S5 Close     35.8 – 41.2
    ============================================================ */
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
 
 :root{
-  --bg:#04050a; --ink:#f4f6fb; --muted:#8a93a8;
+  --ink:#f4f6fb; --muted:#8a93a8;
   --accent:#3fe0c5; --accent2:#7c8cff;
-  --pass:#37e39b; --fail:#ff5d78; --warn:#ffb454;
+  --pass:#37e39b; --fail:#ff5d78;
   --line:rgba(255,255,255,.08);
   --W:1920px; --H:1080px; --ease:cubic-bezier(.16,1,.3,1);
 }
@@ -44,31 +50,32 @@ body{ font-family:'Inter',-apple-system,system-ui,sans-serif; color:var(--ink); 
 .rise{ opacity:0; transform:translateY(26px) }
 body.play .rise{ animation:rise 1s var(--ease) both }
 @keyframes rise{ to{opacity:1;transform:none} }
-@keyframes pop{ from{opacity:0;transform:scale(.4)} to{opacity:1;transform:scale(1)} }
+@keyframes pop{ from{opacity:0;transform:scale(.5)} to{opacity:1;transform:scale(1)} }
+@keyframes fadeShow{ to{opacity:1} }
 @keyframes fadeOut{ to{opacity:0} }
 .eyebrow{ font-family:'JetBrains Mono',monospace; letter-spacing:.32em; text-transform:uppercase; font-size:15px; color:var(--accent); }
-/* gradient text — applied to the actual text element (never a transparent parent) */
-.gt{ background:linear-gradient(100deg,var(--accent) 6%,#8ce9ff 52%,var(--accent2) 96%); -webkit-background-clip:text; background-clip:text; color:transparent; }
+/* gradient text lives on the text element itself, never a transparent parent */
+.gt{ background:linear-gradient(100deg,var(--accent) 6%,#8ce9ff 50%,var(--accent2) 96%); -webkit-background-clip:text; background-clip:text; color:transparent; }
 
 /* =========================================================
    S1 HOOK
    ========================================================= */
-body.play #s1{ animation:fade 3.8s linear 0s both }
+body.play #s1{ animation:fade 4.4s linear 0s both }
 #s1{ flex-direction:column }
 #s1 .eyebrow{ animation-delay:.3s }
-#s1 h1{ font-weight:800; font-size:122px; letter-spacing:-.035em; line-height:.98; text-align:center; margin:22px 0 26px }
+#s1 h1{ font-weight:800; font-size:124px; letter-spacing:-.035em; line-height:.98; text-align:center; margin:22px 0 28px }
 #s1 h1 .l1{ display:block; color:#fff; animation-delay:.55s }
-#s1 h1 .l2{ display:block; animation-delay:.8s }   /* gradient span carries its own background */
-#s1 .tag{ font-size:30px; color:var(--muted); text-align:center; max-width:900px; line-height:1.4; animation-delay:1.3s }
+#s1 h1 .l2{ display:block; animation-delay:.8s }
+#s1 .tag{ font-size:29px; color:var(--muted); text-align:center; max-width:960px; line-height:1.45; animation-delay:1.35s }
 #s1 .tag b{ color:var(--ink); font-weight:600 }
 
 /* =========================================================
-   reusable phone
+   phone
    ========================================================= */
 .phone{ position:relative; width:330px; height:686px; border-radius:44px;
   background:linear-gradient(160deg,#15151b,#0a0a0e); border:2px solid rgba(255,255,255,.10);
   box-shadow:0 44px 120px rgba(0,0,0,.6), 0 0 0 6px #050506, inset 0 0 0 2px rgba(255,255,255,.04); padding:13px; }
-.phone .notch{ position:absolute; top:15px; left:50%; transform:translateX(-50%); width:110px;height:24px;background:#050506;border-radius:0 0 15px 15px;z-index:8 }
+.phone .notch{ position:absolute; top:15px; left:50%; transform:translateX(-50%); width:110px;height:24px;background:#050506;border-radius:0 0 15px 15px;z-index:9 }
 .screen{ position:relative; width:100%; height:100%; border-radius:32px; overflow:hidden; background:linear-gradient(180deg,#131d31,#0b1020); }
 .appbar{ height:58px; background:linear-gradient(90deg,#1d2c54,#16234a); display:flex;align-items:center;justify-content:center;color:#dbe4ff;font-weight:600;font-size:17px;border-bottom:1px solid rgba(255,255,255,.06); gap:9px }
 .appbar .g{ width:20px;height:20px;border-radius:6px;background:linear-gradient(150deg,#5ff0d6,#2ea6ff) }
@@ -78,90 +85,176 @@ body.play #s1{ animation:fade 3.8s linear 0s both }
 .prow{ display:flex; align-items:center; gap:12px; margin:16px 18px 0 }
 .prow .img{ width:50px;height:50px;border-radius:11px;background:linear-gradient(150deg,#24406e,#182c4f);flex:0 0 auto }
 .prow .nm{ font-size:14px;color:#eaf0ff;font-weight:600 } .prow .pr{ font-size:13px;color:var(--accent);margin-top:2px;font-family:'JetBrains Mono' }
-.prow .info{ flex:1 }
+.prow .info{ flex:1 } .prow .qty{ font-size:13px;color:var(--muted);font-family:'JetBrains Mono' }
 .prow .add{ width:58px;height:32px;border-radius:8px;background:rgba(63,224,197,.16);border:1px solid rgba(63,224,197,.4);color:var(--accent);font-size:12px;font-weight:700;display:flex;align-items:center;justify-content:center }
-.doneScreen{ position:absolute; inset:0; background:linear-gradient(180deg,#0e2b25,#0b1020); display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px }
-.doneScreen .wc{ width:94px;height:94px;border-radius:50%;border:4px solid var(--pass);display:flex;align-items:center;justify-content:center;color:var(--pass);font-size:48px;font-weight:800 }
-.doneScreen .wt{ font-size:27px;font-weight:700 } .doneScreen .ws{ color:#9fb2d6;font-size:14px }
+.totline{ margin:22px 18px 0; padding-top:16px; border-top:1px solid rgba(255,255,255,.1); display:flex; justify-content:space-between; font-size:17px; color:#cdd8ff }
+.totline b{ color:#fff }
+.declined{ margin:20px 18px 0; padding:14px 16px; border-radius:11px; background:rgba(255,93,120,.14); border:1px solid rgba(255,93,120,.5); color:var(--fail); font-size:15px; font-weight:700; display:flex; align-items:center; gap:9px; opacity:0 }
 .appscreen{ position:absolute; inset:0; opacity:0 }
-.tap{ position:absolute; width:24px;height:24px;border-radius:50%;background:rgba(255,255,255,.9);opacity:0;z-index:7;transform:translate(-50%,-50%) }
+.tap{ position:absolute; width:24px;height:24px;border-radius:50%;background:rgba(255,255,255,.9);opacity:0;z-index:8;transform:translate(-50%,-50%) }
 @keyframes ripple{ 0%{opacity:.85;transform:translate(-50%,-50%) scale(.3)} 100%{opacity:0;transform:translate(-50%,-50%) scale(3)} }
+.shutter{ position:absolute; inset:0; background:#fff; opacity:0; z-index:10; border-radius:32px }
 
 /* =========================================================
-   S2 AUTO-RUN — test cases execute automatically
+   S2 RUN — runner card + phone, strictly aligned
    ========================================================= */
-body.play #s2{ animation:fade 13.2s linear 3.8s both }
-#s2{ gap:80px }
-#s2 .runner{ width:760px }
-#s2 .rhead{ margin-bottom:18px }
-#s2 .rhead .eyebrow{ animation-delay:4.0s; display:block; margin-bottom:10px }
-#s2 .rhead h2{ font-weight:700; font-size:52px; letter-spacing:-.02em; animation-delay:4.15s }
-.runcard{ background:rgba(9,12,20,.82); border:1px solid var(--line); border-radius:18px; box-shadow:0 40px 110px rgba(0,0,0,.5); overflow:hidden; animation-delay:4.1s }
-.rc-top{ height:48px; background:#0e1424; display:flex;align-items:center;gap:9px;padding:0 18px;border-bottom:1px solid var(--line) }
+body.play #s2{ animation:fade 15.4s linear 4.4s both }
+#s2 .rhead{ position:absolute; left:315px; top:198px; width:820px }
+#s2 .rhead .eyebrow{ display:block; margin-bottom:12px; animation-delay:4.6s }
+#s2 .rhead h2{ font-weight:700; font-size:50px; letter-spacing:-.02em; animation-delay:4.75s }
+.runcard{ position:absolute; left:315px; top:360px; width:820px;
+  background:rgba(9,12,20,.86); border:1px solid var(--line); border-radius:18px;
+  box-shadow:0 40px 110px rgba(0,0,0,.5); overflow:hidden; animation-delay:4.7s }
+.rc-top{ height:52px; background:#0e1424; display:flex;align-items:center;gap:9px;padding:0 20px;border-bottom:1px solid var(--line) }
 .rc-top i{ width:11px;height:11px;border-radius:50% } .rc-top .r{background:#ff5f57}.rc-top .y{background:#febc2e}.rc-top .g{background:#28c840}
 .rc-top span{ margin-left:12px;color:#6f7a95;font-family:'JetBrains Mono';font-size:14px }
-.rc-top .live{ margin-left:auto;color:var(--muted);font-family:'JetBrains Mono';font-size:14px }
-.rc-top .live b{ color:var(--accent) }
-.rrow{ display:flex; align-items:center; gap:16px; padding:16px 22px; border-bottom:1px solid rgba(255,255,255,.05); opacity:.35 }
-.rrow.on{ opacity:1 }
-.rrow .status{ position:relative; width:82px; height:34px; flex:0 0 auto; display:flex; align-items:center }
+/* progress strip — 58px tall */
+.progwrap{ height:58px; padding:0 24px; display:flex; align-items:center; gap:18px; border-bottom:1px solid rgba(255,255,255,.05) }
+.progbar{ flex:1; height:8px; border-radius:5px; background:rgba(255,255,255,.08); overflow:hidden }
+.progfill{ height:100%; width:0; border-radius:5px; background:linear-gradient(90deg,var(--accent),#22c3e6) }
+body.play .progfill{ animation:prog 12.1s linear 5.4s both }
+@keyframes prog{
+  0%{width:0} 18.1%{width:0} 19.3%{width:20%}
+  37.7%{width:20%} 38.9%{width:40%}
+  55.8%{width:40%} 57.0%{width:60%}
+  79.5%{width:60%} 80.7%{width:80%}
+  98.4%{width:80%} 100%{width:100%} }
+.counter{ position:relative; width:118px; height:22px; flex:0 0 auto; font-family:'JetBrains Mono'; font-size:15px; color:var(--muted) }
+.counter span{ position:absolute; left:0; top:0; opacity:0; white-space:nowrap }
+.counter b{ color:var(--accent) }
+@keyframes lblShow{ 0%{opacity:0}12%{opacity:1}88%{opacity:1}100%{opacity:0} }
+body.play .cnt1{ animation:lblShow 2.6s linear 5.4s both }
+body.play .cnt2{ animation:lblShow 2.4s linear 8.0s both }
+body.play .cnt3{ animation:lblShow 2.3s linear 10.4s both }
+body.play .cnt4{ animation:lblShow 2.8s linear 12.7s both }
+body.play .cnt5{ animation:lblShow 2.4s linear 15.5s both }
+body.play .cntDone{ animation:rise .5s var(--ease) 17.9s both }
+.cntDone{ color:var(--pass); font-weight:700 }
+
+/* rows — 64px each, first at card-top+110 (page y = 470) */
+.rrow{ height:64px; display:flex; align-items:center; gap:16px; padding:0 24px; border-bottom:1px solid rgba(255,255,255,.05); opacity:.3 }
+.rrow .status{ position:relative; width:86px; height:36px; flex:0 0 auto; display:flex; align-items:center }
 .spin{ width:20px;height:20px;border-radius:50%;border:2.5px solid rgba(255,255,255,.16);border-top-color:var(--accent);opacity:0 }
 @keyframes spin{ to{transform:rotate(360deg)} }
-.chip{ position:absolute; left:0; height:34px; padding:0 14px; border-radius:8px; display:flex;align-items:center; font-size:13px;font-weight:800;letter-spacing:.05em; opacity:0; transform:scale(.5) }
-.chip.pass{ background:rgba(55,227,155,.14);color:var(--pass);border:1px solid rgba(55,227,155,.4) }
-.chip.fail{ background:rgba(255,93,120,.14);color:var(--fail);border:1px solid rgba(255,93,120,.45) }
+.chip{ position:absolute; left:0; height:34px; padding:0 15px; border-radius:8px; display:flex;align-items:center; font-size:13px;font-weight:800;letter-spacing:.06em; opacity:0; transform:scale(.5) }
+.chip.pass{ background:rgba(55,227,155,.18);color:var(--pass);border:1px solid rgba(55,227,155,.5) }
+.chip.fail{ background:rgba(255,93,120,.18);color:var(--fail);border:1px solid rgba(255,93,120,.55) }
 .rrow .nm{ flex:1; font-size:21px; color:#eef2fb; font-weight:500 }
 .rrow .dur{ font-family:'JetBrains Mono'; font-size:15px; color:var(--muted); opacity:0 }
-.rc-foot{ padding:16px 22px; display:flex; align-items:center; gap:16px; font-size:19px; color:var(--muted); opacity:0 }
-.rc-foot .done{ color:var(--pass); font-weight:700 } .rc-foot .p{ color:var(--pass);font-weight:700 } .rc-foot .f{ color:var(--fail);font-weight:700 }
+@keyframes rowWake{ to{ opacity:1; background:rgba(63,224,197,.07) } }
+@keyframes rowRest{ to{ opacity:1; background:transparent } }
+/* case 1 */
+body.play .r1{ animation:rowWake .3s linear 5.4s both, rowRest .4s linear 7.7s forwards }
+body.play .r1 .spin{ animation:spin .8s linear 5.4s infinite, fadeShow .01s linear 5.4s both, fadeOut .2s linear 7.7s forwards }
+body.play .r1 .chip{ animation:pop .4s var(--ease) 7.7s both }
+body.play .r1 .dur{ animation:fadeShow .4s linear 7.8s both }
+/* case 2 */
+body.play .r2{ animation:rowWake .3s linear 8.0s both, rowRest .4s linear 10.1s forwards }
+body.play .r2 .spin{ animation:spin .8s linear 8.0s infinite, fadeShow .01s linear 8.0s both, fadeOut .2s linear 10.1s forwards }
+body.play .r2 .chip{ animation:pop .4s var(--ease) 10.1s both }
+body.play .r2 .dur{ animation:fadeShow .4s linear 10.2s both }
+/* case 3 */
+body.play .r3{ animation:rowWake .3s linear 10.4s both, rowRest .4s linear 12.3s forwards }
+body.play .r3 .spin{ animation:spin .8s linear 10.4s infinite, fadeShow .01s linear 10.4s both, fadeOut .2s linear 12.3s forwards }
+body.play .r3 .chip{ animation:pop .4s var(--ease) 12.3s both }
+body.play .r3 .dur{ animation:fadeShow .4s linear 12.4s both }
+/* case 4 — FAIL */
+body.play .r4{ animation:rowWake .3s linear 12.7s both, rowRest .4s linear 15.2s forwards }
+body.play .r4 .spin{ animation:spin .8s linear 12.7s infinite, fadeShow .01s linear 12.7s both, fadeOut .2s linear 15.2s forwards }
+body.play .r4 .chip{ animation:pop .4s var(--ease) 15.2s both }
+body.play .r4 .dur{ animation:fadeShow .4s linear 15.3s both }
+/* case 5 */
+body.play .r5{ animation:rowWake .3s linear 15.5s both, rowRest .4s linear 17.5s forwards }
+body.play .r5 .spin{ animation:spin .8s linear 15.5s infinite, fadeShow .01s linear 15.5s both, fadeOut .2s linear 17.5s forwards }
+body.play .r5 .chip{ animation:pop .4s var(--ease) 17.5s both }
+body.play .r5 .dur{ animation:fadeShow .4s linear 17.6s both }
 
-/* per-row scheduling: on -> spin -> chip(+dur), row light on while running */
-body.play .r1.rrow{ animation:rowOn .01s linear 4.6s both }
-body.play .r2.rrow{ animation:rowOn .01s linear 6.0s both }
-body.play .r3.rrow{ animation:rowOn .01s linear 7.4s both }
-body.play .r4.rrow{ animation:rowOn .01s linear 8.8s both }
-body.play .r5.rrow{ animation:rowOn .01s linear 10.4s both }
-@keyframes rowOn{ to{opacity:1} }
-body.play .r1 .spin{ animation:spin .8s linear 4.6s infinite, fadeShow .01s linear 4.6s both, fadeOut .2s linear 5.5s forwards }
-body.play .r2 .spin{ animation:spin .8s linear 6.0s infinite, fadeShow .01s linear 6.0s both, fadeOut .2s linear 6.9s forwards }
-body.play .r3 .spin{ animation:spin .8s linear 7.4s infinite, fadeShow .01s linear 7.4s both, fadeOut .2s linear 8.3s forwards }
-body.play .r4 .spin{ animation:spin .8s linear 8.8s infinite, fadeShow .01s linear 8.8s both, fadeOut .2s linear 10.0s forwards }
-body.play .r5 .spin{ animation:spin .8s linear 10.4s infinite, fadeShow .01s linear 10.4s both, fadeOut .2s linear 11.3s forwards }
-@keyframes fadeShow{ to{opacity:1} }
-body.play .r1 .chip{ animation:pop .4s var(--ease) 5.5s both }
-body.play .r2 .chip{ animation:pop .4s var(--ease) 6.9s both }
-body.play .r3 .chip{ animation:pop .4s var(--ease) 8.3s both }
-body.play .r4 .chip{ animation:pop .4s var(--ease) 10.0s both }
-body.play .r5 .chip{ animation:pop .4s var(--ease) 11.3s both }
-body.play .r1 .dur{ animation:fadeShow .4s linear 5.6s both }
-body.play .r2 .dur{ animation:fadeShow .4s linear 7.0s both }
-body.play .r3 .dur{ animation:fadeShow .4s linear 8.4s both }
-body.play .r4 .dur{ animation:fadeShow .4s linear 10.1s both }
-body.play .r5 .dur{ animation:fadeShow .4s linear 11.4s both }
-body.play #s2 .rc-foot{ animation:rise .6s var(--ease) 11.9s both }
+.rc-foot{ height:56px; padding:0 24px; display:flex; align-items:center; gap:14px; font-size:19px; color:var(--muted); opacity:0 }
+.rc-foot .p{ color:var(--pass);font-weight:700 } .rc-foot .f{ color:var(--fail);font-weight:700 }
+body.play .rc-foot{ animation:rise .6s var(--ease) 17.9s both }
 
-/* phone driving, synced to the run */
-.phonewrap{ opacity:0 }
-body.play .phonewrap{ animation:rise 1.1s var(--ease) 4.2s both, bob 7s ease-in-out 5.4s infinite }
-@keyframes bob{ 0%,100%{margin-top:0}50%{margin-top:-12px} }
-@keyframes show{ 0%{opacity:0}10%{opacity:1}90%{opacity:1}100%{opacity:0} }
-body.play #scLogin{    animation:show 3.0s linear 4.5s both }
-body.play #scProducts{ animation:show 3.2s linear 7.3s both }
-body.play #scCheckout{ animation:show 2.6s linear 10.3s both }
-body.play #scDone{     animation:show 5.4s linear 12.7s both }
-body.play .tapLogin{ animation:ripple .7s ease-out 6.4s both }
-body.play .tapCheckout{ animation:ripple .7s ease-out 11.6s both }
+/* phone column */
+.phonewrap{ position:absolute; left:1275px; top:230px; opacity:0 }
+body.play .phonewrap{ animation:rise 1.1s var(--ease) 4.9s both }
+/* the screen on the phone is the screen of the case that is running */
+@keyframes show{ 0%{opacity:0}9%{opacity:1}91%{opacity:1}100%{opacity:0} }
+body.play #scLogin{    animation:show 2.85s linear 5.20s both }
+body.play #scProducts{ animation:show 2.50s linear 7.95s both }
+body.play #scCart{     animation:show 2.40s linear 10.35s both }
+body.play #scCheckout{ animation:show 2.95s linear 12.65s both }
+body.play #scLogin2{   animation:show 4.10s linear 15.50s both }
+body.play .tapLogin{    animation:ripple .7s ease-out 6.6s both }
+body.play .tapAdd{      animation:ripple .7s ease-out 9.0s both }
+body.play .tapCheckout{ animation:ripple .7s ease-out 13.9s both }
+body.play #declined{    animation:rise .5s var(--ease) 14.5s both }
+/* a capture flash on the phone as each case wraps up */
+body.play #shutter{ animation:shutterSpikes 12.1s linear 5.4s both }
+@keyframes shutterSpikes{
+  0%{opacity:0}
+  18.1%{opacity:0} 18.9%{opacity:.5} 20.1%{opacity:0}
+  37.7%{opacity:0} 38.5%{opacity:.5} 39.7%{opacity:0}
+  55.8%{opacity:0} 56.6%{opacity:.5} 57.8%{opacity:0}
+  79.5%{opacity:0} 80.3%{opacity:.5} 81.5%{opacity:0}
+  98.4%{opacity:0} 99.2%{opacity:.5} 100%{opacity:0} }
+
+.runlabel{ position:absolute; left:1275px; top:952px; width:330px; text-align:center }
+.runlabel .pill{ position:absolute; left:50%; transform:translateX(-50%); white-space:nowrap;
+  padding:10px 18px; border-radius:100px; background:rgba(63,224,197,.10); border:1px solid rgba(63,224,197,.32);
+  color:var(--accent); font-size:15px; font-weight:600; font-family:'JetBrains Mono'; opacity:0 }
+body.play .lb1{ animation:lblShow 2.6s linear 5.4s both }
+body.play .lb2{ animation:lblShow 2.4s linear 8.0s both }
+body.play .lb3{ animation:lblShow 2.3s linear 10.4s both }
+body.play .lb4{ animation:lblShow 2.8s linear 12.7s both }
+body.play .lb5{ animation:lblShow 2.4s linear 15.5s both }
+body.play .lbDone{ animation:rise .5s var(--ease) 17.9s both }
+.lbDone{ background:rgba(55,227,155,.12); border-color:rgba(55,227,155,.4); color:var(--pass) }
+.capnote{ position:absolute; left:1275px; top:1012px; width:330px; text-align:center; font-size:14px; color:var(--muted); opacity:0 }
+body.play .capnote{ animation:fadeShow .8s linear 6.2s both }
+.capnote i{ color:var(--accent); font-style:normal }
 
 /* =========================================================
-   S3 REPORT — PASS / FAIL
+   S3 CAPTURE — every screen captured
    ========================================================= */
-body.play #s3{ animation:fade 12.0s linear 17.0s both }
+body.play #s3{ animation:fade 6.0s linear 19.8s both }
 #s3{ flex-direction:column }
-#s3 .head{ width:1180px; display:flex; align-items:flex-end; justify-content:space-between; margin-bottom:18px }
-#s3 .head .eyebrow{ animation-delay:17.3s; display:block; margin-bottom:10px }
-#s3 .head h2{ font-weight:700; font-size:54px; letter-spacing:-.02em; animation-delay:17.4s }
-#s3 .head .when{ font-family:'JetBrains Mono'; font-size:18px; color:var(--muted); animation-delay:17.6s }
-.reportcard{ width:1180px; background:rgba(9,12,20,.82); border:1px solid var(--line); border-radius:20px; box-shadow:0 50px 130px rgba(0,0,0,.55); overflow:hidden; animation-delay:17.2s }
+#s3 .eyebrow{ animation-delay:20.0s }
+#s3 h2{ font-weight:700; font-size:58px; letter-spacing:-.02em; margin:16px 0 8px; animation-delay:20.15s }
+#s3 .sub{ font-size:24px; color:var(--muted); margin-bottom:40px; animation-delay:20.3s }
+#s3 .grid{ display:grid; grid-template-columns:repeat(4,178px); grid-template-rows:repeat(2,226px); gap:24px }
+.cap-thumb{ position:relative; border-radius:16px; border:1.5px solid var(--line); background:linear-gradient(180deg,#101a2e,#0a0f1d); overflow:hidden; opacity:0; transform:translateY(22px) scale(.96) }
+.cap-thumb .b{ height:30px; background:linear-gradient(90deg,#1d2c54,#16234a) }
+.cap-thumb.bad .b{ background:linear-gradient(90deg,#5a2233,#3a1622) }
+.cap-thumb .l{ height:9px; margin:13px 13px 0; border-radius:5px; background:rgba(255,255,255,.09) }
+.cap-thumb .name{ position:absolute; bottom:9px; left:0; right:0; text-align:center; font-family:'JetBrains Mono'; font-size:13px; color:#9fb2d6 }
+.cap-thumb .flash{ position:absolute; inset:0; background:#fff; opacity:0 }
+.cap-thumb .dot{ position:absolute; top:11px; right:11px; width:11px; height:11px; border-radius:50%; background:var(--accent); opacity:0; box-shadow:0 0 12px var(--accent) }
+.cap-thumb.bad .dot{ background:var(--fail); box-shadow:0 0 12px var(--fail) }
+body.play .cap-thumb{ animation:capIn .6s var(--ease) both }
+@keyframes capIn{ to{opacity:1;transform:none} }
+body.play .cap-thumb .flash{ animation:capFlash .45s ease-out both }
+@keyframes capFlash{ 0%{opacity:0}30%{opacity:.75}100%{opacity:0} }
+body.play .cap-thumb .dot{ animation:pop .35s var(--ease) both }
+#s3 .c1{animation-delay:20.6s}  #s3 .c1 .flash{animation-delay:20.6s}  #s3 .c1 .dot{animation-delay:20.95s}
+#s3 .c2{animation-delay:20.9s}  #s3 .c2 .flash{animation-delay:20.9s}  #s3 .c2 .dot{animation-delay:21.25s}
+#s3 .c3{animation-delay:21.2s}  #s3 .c3 .flash{animation-delay:21.2s}  #s3 .c3 .dot{animation-delay:21.55s}
+#s3 .c4{animation-delay:21.5s}  #s3 .c4 .flash{animation-delay:21.5s}  #s3 .c4 .dot{animation-delay:21.85s}
+#s3 .c5{animation-delay:21.8s}  #s3 .c5 .flash{animation-delay:21.8s}  #s3 .c5 .dot{animation-delay:22.15s}
+#s3 .c6{animation-delay:22.1s}  #s3 .c6 .flash{animation-delay:22.1s}  #s3 .c6 .dot{animation-delay:22.45s}
+#s3 .c7{animation-delay:22.4s}  #s3 .c7 .flash{animation-delay:22.4s}  #s3 .c7 .dot{animation-delay:22.75s}
+#s3 .c8{animation-delay:22.7s}  #s3 .c8 .flash{animation-delay:22.7s}  #s3 .c8 .dot{animation-delay:23.05s}
+#s3 .foot{ margin-top:36px; font-size:22px; color:var(--muted); animation-delay:23.5s }
+#s3 .foot b{ color:var(--ink); font-weight:600 }
+
+/* =========================================================
+   S4 REPORT
+   ========================================================= */
+body.play #s4{ animation:fade 10.0s linear 25.8s both }
+#s4{ flex-direction:column }
+#s4 .head{ width:1180px; display:flex; align-items:flex-end; justify-content:space-between; margin-bottom:18px }
+#s4 .head .eyebrow{ animation-delay:26.1s; display:block; margin-bottom:10px }
+#s4 .head h2{ font-weight:700; font-size:54px; letter-spacing:-.02em; animation-delay:26.2s }
+#s4 .head .when{ font-family:'JetBrains Mono'; font-size:18px; color:var(--muted); animation-delay:26.4s }
+.reportcard{ width:1180px; background:rgba(9,12,20,.86); border:1px solid var(--line); border-radius:20px; box-shadow:0 50px 130px rgba(0,0,0,.55); overflow:hidden; animation-delay:26.0s }
 .rp-top{ height:50px; background:#0e1424; display:flex;align-items:center;gap:9px;padding:0 20px;border-bottom:1px solid var(--line) }
 .rp-top i{ width:12px;height:12px;border-radius:50% } .rp-top .r{background:#ff5f57}.rp-top .y{background:#febc2e}.rp-top .g{background:#28c840}
 .rp-top span{ margin-left:12px;color:#6f7a95;font-family:'JetBrains Mono';font-size:14px }
@@ -178,38 +271,38 @@ body.play #s3{ animation:fade 12.0s linear 17.0s both }
 .rp-right{ flex:1; padding:20px 28px }
 .trow{ display:flex; align-items:center; gap:16px; padding:14px 6px; border-bottom:1px dashed rgba(255,255,255,.07); opacity:0 }
 .trow .st{ width:74px;height:31px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:800;letter-spacing:.05em;flex:0 0 auto }
-.trow .st.pass{ background:rgba(55,227,155,.14);color:var(--pass);border:1px solid rgba(55,227,155,.4) }
-.trow .st.fail{ background:rgba(255,93,120,.14);color:var(--fail);border:1px solid rgba(255,93,120,.45) }
+.trow .st.pass{ background:rgba(55,227,155,.18);color:var(--pass);border:1px solid rgba(55,227,155,.5) }
+.trow .st.fail{ background:rgba(255,93,120,.18);color:var(--fail);border:1px solid rgba(255,93,120,.55) }
 .trow .nm{ flex:1;font-size:20px;color:#eef2fb;font-weight:500 }
 .trow .dur{ font-family:'JetBrains Mono';font-size:15px;color:var(--muted) }
 body.play .trow{ animation:rowIn .5s var(--ease) both }
 @keyframes rowIn{ from{opacity:0;transform:translateX(18px)} to{opacity:1;transform:none} }
-#s3 .t1{animation-delay:17.9s}#s3 .t2{animation-delay:18.1s}#s3 .t3{animation-delay:18.3s}
-#s3 .t4{animation-delay:18.5s}#s3 .t5{animation-delay:18.7s}
+#s4 .t1{animation-delay:26.7s}#s4 .t2{animation-delay:26.9s}#s4 .t3{animation-delay:27.1s}
+#s4 .t4{animation-delay:27.3s}#s4 .t5{animation-delay:27.5s}
 .faildetail{ margin:6px 6px 0; border-radius:14px; background:rgba(255,93,120,.06); border:1px solid rgba(255,93,120,.25); padding:16px 20px; display:flex; gap:20px; align-items:center; opacity:0 }
-.faildetail .mini{ width:70px;height:126px;border-radius:10px;overflow:hidden;border:1px solid rgba(255,255,255,.14);background:linear-gradient(180deg,#182034,#0d1424);display:flex;flex-direction:column }
 .faildetail .thumbs{ display:flex; gap:12px }
+.faildetail .mini{ width:70px;height:126px;border-radius:10px;overflow:hidden;border:1px solid rgba(255,255,255,.14);background:linear-gradient(180deg,#182034,#0d1424);display:flex;flex-direction:column }
 .faildetail .mini .b{ height:19px } .faildetail .mini.b1 .b{background:linear-gradient(90deg,#1d2c54,#16234a)} .faildetail .mini.b2 .b{background:linear-gradient(90deg,#5a2233,#3a1622)}
 .faildetail .mini .ll{ height:7px;margin:8px 8px 0;border-radius:4px;background:rgba(255,255,255,.10) }
 .faildetail .mini .cap{ margin-top:auto;text-align:center;font-size:11px;font-family:'JetBrains Mono';padding:5px 0 }
 .faildetail .txt .h{ font-size:19px;font-weight:700;color:var(--fail);margin-bottom:8px }
 .faildetail .txt .r{ font-size:17px;color:#c8d2e6;margin:4px 0 }
 .faildetail .txt .r b{ color:#fff } .faildetail .txt .r .g{ color:var(--pass) } .faildetail .txt .r .bad{ color:var(--fail) }
-body.play #failrow{ animation:rowIn .6s var(--ease) 19.1s both }
+body.play #failrow{ animation:rowIn .6s var(--ease) 27.9s both }
 
 /* =========================================================
-   S4 CLOSE
+   S5 CLOSE
    ========================================================= */
-body.play #s4{ animation:fade 6.0s linear 28.8s both }
-#s4{ flex-direction:column }
-#s4 .mark{ width:90px;height:90px;border-radius:24px;position:relative;background:linear-gradient(155deg,#5ff0d6,#2ea6ff);box-shadow:0 0 60px rgba(63,224,197,.4);margin-bottom:36px;animation-delay:29.1s }
-#s4 .mark::after{content:"";position:absolute;inset:17px;border-radius:12px;border:4px solid rgba(0,0,0,.82)}
-#s4 .mark::before{content:"";position:absolute;left:40px;top:25px;width:11px;height:11px;border-radius:50%;background:#04060b;z-index:2;box-shadow:0 26px 0 #04060b}
-#s4 h1{ font-weight:700;font-size:84px;letter-spacing:-.03em;text-align:center;line-height:1.04;animation-delay:29.25s }
-#s4 .principles{ margin-top:32px;font-size:28px;color:var(--muted);font-weight:500;animation-delay:29.6s }
-#s4 .principles b{ color:var(--ink);font-weight:600 }
-#s4 .repo{ margin-top:50px;font-family:'JetBrains Mono';font-size:23px;color:var(--muted);animation-delay:30.0s }
-#s4 .repo b{ color:var(--ink) }
+body.play #s5{ animation:fade 5.4s linear 35.8s both }
+#s5{ flex-direction:column }
+#s5 .mark{ width:90px;height:90px;border-radius:24px;position:relative;background:linear-gradient(155deg,#5ff0d6,#2ea6ff);box-shadow:0 0 60px rgba(63,224,197,.4);margin-bottom:34px;animation-delay:36.1s }
+#s5 .mark::after{content:"";position:absolute;inset:17px;border-radius:12px;border:4px solid rgba(0,0,0,.82)}
+#s5 .mark::before{content:"";position:absolute;left:40px;top:25px;width:11px;height:11px;border-radius:50%;background:#04060b;z-index:2;box-shadow:0 26px 0 #04060b}
+#s5 h1{ font-weight:700;font-size:82px;letter-spacing:-.03em;text-align:center;line-height:1.04;animation-delay:36.25s }
+#s5 .principles{ margin-top:30px;font-size:27px;color:var(--muted);font-weight:500;animation-delay:36.6s }
+#s5 .principles b{ color:var(--ink);font-weight:600 }
+#s5 .repo{ margin-top:46px;font-family:'JetBrains Mono';font-size:23px;color:var(--muted);animation-delay:37.0s }
+#s5 .repo b{ color:var(--ink) }
 </style>
 </head>
 <body>
@@ -217,71 +310,127 @@ body.play #s4{ animation:fade 6.0s linear 28.8s both }
 
   <!-- S1 HOOK -->
   <section class="scene" id="s1">
-    <div class="eyebrow rise">Mobile QA · Automated</div>
+    <div class="eyebrow rise">For mobile QA teams</div>
     <h1>
-      <span class="l1 rise">Test cases that</span>
-      <span class="l2 gt rise">run themselves.</span>
+      <span class="l1 rise">The QA agent</span>
+      <span class="l2 gt rise">for mobile apps.</span>
     </h1>
-    <p class="tag rise">Write them once. The runner <b>drives your app</b> and checks every result — then hands you a <b>pass / fail</b> report.</p>
+    <p class="tag rise">It drives your app on a real device, runs your <b>test cases</b>, captures <b>every screen</b>, and reports <b>pass or fail</b>.</p>
   </section>
 
-  <!-- S2 AUTO-RUN -->
+  <!-- S2 RUN -->
   <section class="scene" id="s2">
-    <div class="runner">
-      <div class="rhead">
-        <span class="eyebrow rise">Automated run</span>
-        <h2 class="rise">Your test cases, running themselves.</h2>
+    <div class="rhead">
+      <span class="eyebrow rise">Automated regression run</span>
+      <h2 class="rise">Your whole suite, hands off.</h2>
+    </div>
+
+    <div class="runcard rise">
+      <div class="rc-top"><i class="r"></i><i class="y"></i><i class="g"></i><span>test-run · shop.apk · Pixel 7</span></div>
+      <div class="progwrap">
+        <div class="counter">
+          <span class="cnt1">case <b>1</b> of 5</span>
+          <span class="cnt2">case <b>2</b> of 5</span>
+          <span class="cnt3">case <b>3</b> of 5</span>
+          <span class="cnt4">case <b>4</b> of 5</span>
+          <span class="cnt5">case <b>5</b> of 5</span>
+          <span class="cntDone">5 of 5 complete</span>
+        </div>
+        <div class="progbar"><div class="progfill"></div></div>
       </div>
-      <div class="runcard rise">
-        <div class="rc-top"><i class="r"></i><i class="y"></i><i class="g"></i><span>test-run · shop.apk</span><span class="live">5 cases · <b>no taps from you</b></span></div>
-        <div class="rrow r1"><div class="status"><div class="spin"></div><div class="chip pass">PASS</div></div><div class="nm">Login with valid credentials</div><div class="dur">3.1s</div></div>
-        <div class="rrow r2"><div class="status"><div class="spin"></div><div class="chip pass">PASS</div></div><div class="nm">Add item to cart</div><div class="dur">2.4s</div></div>
-        <div class="rrow r3"><div class="status"><div class="spin"></div><div class="chip pass">PASS</div></div><div class="nm">Cart shows correct total</div><div class="dur">1.9s</div></div>
-        <div class="rrow r4"><div class="status"><div class="spin"></div><div class="chip fail">FAIL</div></div><div class="nm">Checkout with expired card</div><div class="dur">4.2s</div></div>
-        <div class="rrow r5"><div class="status"><div class="spin"></div><div class="chip pass">PASS</div></div><div class="nm">Sign out returns to login</div><div class="dur">2.0s</div></div>
-        <div class="rc-foot"><span class="done">✓ Run complete</span> <span>·</span> <span><span class="p">4 passed</span>, <span class="f">1 failed</span></span></div>
-      </div>
+
+      <div class="rrow r1"><div class="status"><div class="spin"></div><div class="chip pass">PASS</div></div><div class="nm">Login with valid credentials</div><div class="dur">3.1s</div></div>
+      <div class="rrow r2"><div class="status"><div class="spin"></div><div class="chip pass">PASS</div></div><div class="nm">Add item to cart</div><div class="dur">2.4s</div></div>
+      <div class="rrow r3"><div class="status"><div class="spin"></div><div class="chip pass">PASS</div></div><div class="nm">Cart shows correct total</div><div class="dur">1.9s</div></div>
+      <div class="rrow r4"><div class="status"><div class="spin"></div><div class="chip fail">FAIL</div></div><div class="nm">Checkout with expired card</div><div class="dur">4.2s</div></div>
+      <div class="rrow r5"><div class="status"><div class="spin"></div><div class="chip pass">PASS</div></div><div class="nm">Sign out returns to login</div><div class="dur">2.0s</div></div>
+
+      <div class="rc-foot"><span class="p">4 passed</span><span>·</span><span class="f">1 failed</span><span>·</span><span>18 screens captured</span></div>
     </div>
 
     <div class="phonewrap">
       <div class="phone">
         <div class="notch"></div>
         <div class="screen">
+          <!-- case 1 -->
           <div class="appscreen" id="scLogin">
             <div class="appbar"><span class="g"></span>Swag&nbsp;Labs</div>
-            <div class="field">Username&nbsp;·&nbsp;<span class="val">test@shop.io</span></div>
+            <div class="field">Username&nbsp;·&nbsp;<span class="val">qa@shop.io</span></div>
             <div class="field">••••••••••</div>
             <div class="cta">LOGIN</div>
             <div class="tap tapLogin" style="left:165px;top:320px"></div>
           </div>
+          <!-- case 2 -->
           <div class="appscreen" id="scProducts">
             <div class="appbar">Products</div>
             <div class="prow"><div class="img"></div><div class="info"><div class="nm">Backpack</div><div class="pr">$29.99</div></div><div class="add">ADD</div></div>
             <div class="prow"><div class="img"></div><div class="info"><div class="nm">Bike Light</div><div class="pr">$9.99</div></div><div class="add">ADD</div></div>
             <div class="prow"><div class="img"></div><div class="info"><div class="nm">Bolt T-Shirt</div><div class="pr">$15.99</div></div><div class="add">ADD</div></div>
-            <div class="cta" style="margin-top:26px">GO TO CART</div>
+            <div class="tap tapAdd" style="left:270px;top:130px"></div>
           </div>
+          <!-- case 3 -->
+          <div class="appscreen" id="scCart">
+            <div class="appbar">Your Cart</div>
+            <div class="prow"><div class="img"></div><div class="info"><div class="nm">Backpack</div><div class="pr">$29.99</div></div><div class="qty">×1</div></div>
+            <div class="prow"><div class="img"></div><div class="info"><div class="nm">Bike Light</div><div class="pr">$9.99</div></div><div class="qty">×1</div></div>
+            <div class="totline"><span>Total</span><b>$39.98</b></div>
+            <div class="cta">CHECKOUT</div>
+          </div>
+          <!-- case 4 — FAIL -->
           <div class="appscreen" id="scCheckout">
             <div class="appbar">Checkout</div>
-            <div class="field">Full name&nbsp;·&nbsp;<span class="val">Alex Doe</span></div>
-            <div class="field">Address&nbsp;·&nbsp;<span class="val">1 Market St</span></div>
-            <div class="field">Card&nbsp;·&nbsp;<span class="val">•••• 4242</span></div>
+            <div class="field">Name&nbsp;·&nbsp;<span class="val">Alex Doe</span></div>
+            <div class="field">Card&nbsp;·&nbsp;<span class="val">•••• 0119</span></div>
             <div class="cta">PLACE ORDER</div>
-            <div class="tap tapCheckout" style="left:165px;top:330px"></div>
+            <div class="declined" id="declined">✕&nbsp; Payment declined</div>
+            <div class="tap tapCheckout" style="left:165px;top:268px"></div>
           </div>
-          <div class="appscreen" id="scDone">
-            <div class="doneScreen"><div class="wc">✓</div><div class="wt">Order placed</div><div class="ws">Thank you for your order</div></div>
+          <!-- case 5 -->
+          <div class="appscreen" id="scLogin2">
+            <div class="appbar"><span class="g"></span>Swag&nbsp;Labs</div>
+            <div class="field">Username</div>
+            <div class="field">Password</div>
+            <div class="cta">LOGIN</div>
           </div>
+          <div class="shutter" id="shutter"></div>
         </div>
       </div>
     </div>
+
+    <div class="runlabel">
+      <div class="pill lb1">▶ Running · Login</div>
+      <div class="pill lb2">▶ Running · Add to cart</div>
+      <div class="pill lb3">▶ Running · Cart total</div>
+      <div class="pill lb4">▶ Running · Checkout</div>
+      <div class="pill lb5">▶ Running · Sign out</div>
+      <div class="pill lbDone">✓ Run complete</div>
+    </div>
+    <div class="capnote"><i>◉</i> capturing every screen as it runs</div>
   </section>
 
-  <!-- S3 REPORT -->
+  <!-- S3 CAPTURE -->
   <section class="scene" id="s3">
+    <div class="eyebrow rise">Evidence</div>
+    <h2 class="rise">Every screen, captured.</h2>
+    <div class="sub rise">Before and after every step — saved with the run.</div>
+    <div class="grid">
+      <div class="cap-thumb c1"><div class="dot"></div><div class="b"></div><div class="l" style="width:70%"></div><div class="l" style="width:50%"></div><div class="name">01 · login</div><div class="flash"></div></div>
+      <div class="cap-thumb c2"><div class="dot"></div><div class="b"></div><div class="l" style="width:60%"></div><div class="l" style="width:78%"></div><div class="name">02 · products</div><div class="flash"></div></div>
+      <div class="cap-thumb c3"><div class="dot"></div><div class="b"></div><div class="l" style="width:78%"></div><div class="l" style="width:55%"></div><div class="name">03 · add to cart</div><div class="flash"></div></div>
+      <div class="cap-thumb c4"><div class="dot"></div><div class="b"></div><div class="l" style="width:65%"></div><div class="l" style="width:70%"></div><div class="name">04 · cart</div><div class="flash"></div></div>
+      <div class="cap-thumb c5"><div class="dot"></div><div class="b"></div><div class="l" style="width:72%"></div><div class="l" style="width:52%"></div><div class="name">05 · total</div><div class="flash"></div></div>
+      <div class="cap-thumb c6"><div class="dot"></div><div class="b"></div><div class="l" style="width:58%"></div><div class="l" style="width:74%"></div><div class="name">06 · checkout</div><div class="flash"></div></div>
+      <div class="cap-thumb c7 bad"><div class="dot"></div><div class="b"></div><div class="l" style="width:68%"></div><div class="l" style="width:60%"></div><div class="name">07 · declined</div><div class="flash"></div></div>
+      <div class="cap-thumb c8"><div class="dot"></div><div class="b"></div><div class="l" style="width:62%"></div><div class="l" style="width:76%"></div><div class="name">08 · sign out</div><div class="flash"></div></div>
+    </div>
+    <div class="foot rise">So a failure is never a guess — you see <b>exactly what the app did</b>.</div>
+  </section>
+
+  <!-- S4 REPORT -->
+  <section class="scene" id="s4">
     <div class="head">
       <div><span class="eyebrow rise">Report</span><h2 class="rise">Pass or fail — at a glance.</h2></div>
-      <div class="when rise">run 8f2 · 5 test cases · 13.6s</div>
+      <div class="when rise">run 8f2 · 5 cases · 13.6s</div>
     </div>
     <div class="reportcard rise">
       <div class="rp-top"><i class="r"></i><i class="y"></i><i class="g"></i><span>report.html</span></div>
@@ -315,11 +464,11 @@ body.play #s4{ animation:fade 6.0s linear 28.8s both }
     </div>
   </section>
 
-  <!-- S4 CLOSE -->
-  <section class="scene" id="s4">
+  <!-- S5 CLOSE -->
+  <section class="scene" id="s5">
     <div class="mark rise"></div>
     <h1 class="rise">Mobile QA<br>Test Runner</h1>
-    <div class="principles rise"><b>Automated</b> &nbsp;·&nbsp; <b>Resilient</b> &nbsp;·&nbsp; <b>Pass / fail proof</b></div>
+    <div class="principles rise"><b>Automated</b> &nbsp;·&nbsp; <b>Evidence-backed</b> &nbsp;·&nbsp; <b>Pass / fail proof</b></div>
     <div class="repo rise">sicariusa/<b>mobile-testing</b></div>
   </section>
 
@@ -328,7 +477,7 @@ body.play #s4{ animation:fade 6.0s linear 28.8s both }
 window.addEventListener('load', ()=>{
   requestAnimationFrame(()=>{
     document.body.classList.add('play');
-    setTimeout(()=>{ window.__DONE__ = true; }, 36000);
+    setTimeout(()=>{ window.__DONE__ = true; }, 42000);
   });
 });
 </script>

@@ -1,58 +1,72 @@
 # Showcase videos
 
-Two cuts of the Mobile QA Test Runner reel. Both are benefit-led product films —
-they show what the runner *does* (drives your app, maps and captures screens,
-recovers when blocked, and produces a clear pass/fail report) without exposing
-how the engine works.
+Product films for the Mobile QA Test Runner, aimed at **mobile QA teams**. They
+show what the runner does — runs your test cases hands-off, captures every
+screen, and reports pass/fail — without exposing how the engine works.
 
-| | format | length | file |
-|---|---|---|---|
-| **Wide** (landscape / embeds) | 1920×1080 · 16:9 | ~38s | `mobile-qa-showcase.mp4` |
-| **Vertical** (TikTok / Reels / Shorts) | 1080×1920 · 9:16 | ~43s | `mobile-qa-showcase-vertical.mp4` |
+| | format | length | audio | file |
+|---|---|---|---|---|
+| **Wide** (landscape / embeds) | 1920×1080 · 16:9 · 30fps | ~41s | yes | `mobile-qa-showcase.mp4` |
+| **Vertical** (TikTok / Reels / Shorts) | 1080×1920 · 9:16 | ~43s | no | `mobile-qa-showcase-vertical.mp4` |
 
 ![poster](mobile-qa-showcase-poster.png)
 
-Both are H.264 (yuv420p, faststart) and play everywhere. Posters:
+H.264 (yuv420p, faststart) + AAC. Posters:
 `mobile-qa-showcase-poster.png`, `mobile-qa-showcase-vertical-poster.png`.
 
-## Wide cut — short & QA-focused
+## Wide cut
 
-A tight ~38s cut built around the QA story: automated test cases and a pass/fail
-report.
+1. **Hook** — *"The QA agent for mobile apps."*
+2. **Automated regression run** — five test cases execute hands-off. The phone
+   is **locked to the running case**: a `case N of 5` counter and progress bar
+   advance in step, the running row is highlighted, and the phone shows that
+   case's screen with a `▶ Running · <case>` label (Login → Products → Cart →
+   Checkout, where the expired card produces *"Payment declined"* → **FAIL** →
+   Sign out). Screens are captured as it runs.
+3. **Evidence** — *"Every screen, captured."* Before/after of every step.
+4. **Report** — 4 passed / 1 failed, 80% pass rate, with the failed case
+   expanded (*Expected "Order placed" ✓ / Got "Payment declined" ✕*).
+5. **Close.**
 
-1. **Hook** — *"Test cases that run themselves."*
-2. **Automated run** — 5 test cases execute on their own (no taps), stamping
-   **PASS / PASS / PASS / FAIL / PASS** while the app is driven in a phone beside
-   the runner.
-3. **Report** — **4 Passed / 1 Failed**, an 80% pass-rate ring, and the failed
-   case expanded to a defect detail
-   (*Expected "Order placed" ✓ / Got "Payment declined" ✕*).
-4. Close — Automated · Resilient · Pass / fail proof.
+## How it is built (and why it stays in sync)
 
-The runner and the report use the same five cases, so the numbers line up.
+The video is rendered from a self-contained animated page and screen-recorded,
+then scored. Two wrinkles are handled explicitly:
 
-## Vertical cut
-
-The same story, condensed for social: title → drives your app → finds every
-control → recovers when blocked → captures every step → Welcome / `PASS` → close.
-
-## Rebuild either one
-
-Rendered from a self-contained animated page and screen-recorded, so each
-regenerates identically. The recorder is configurable via env vars:
+- **Chromium renders the CSS timeline slower than wall-clock while recording.**
+  `tools/measure_events.py` detects the five PASS/FAIL chips in the recording
+  (they sit at known rects) and least-squares fits `video_t = a·anim_t + b`.
+  Re-timing the video by `1/a` restores the authored pace, so cue times equal
+  the animation times in the page. Measured fit: `a ≈ 1.1777`, max residual
+  ≈ 0.05 s.
+- **The soundtrack is generated, not licensed.** `tools/make_soundtrack.py`
+  synthesises the bed (kick / hats / bass / arpeggio / pad over Am–F–C–G) plus
+  UI sounds locked to the on-screen events. Verified sync: worst drift 67 ms
+  (2 frames), most cues exact.
 
 ```bash
-# Wide (16:9) — the default
-SHOW_MS=56000 node tools/record_showcase.mjs            # → media/*.webm
+# 1. render
+SHOW_MS=44000 node tools/record_showcase.mjs                 # → media/*.webm
 
-# Vertical (9:16)
+# 2. measure the anim→video mapping
+python3 tools/measure_events.py media/<recording>.webm
+
+# 3. score it
+python3 tools/make_soundtrack.py /tmp/soundtrack.wav
+
+# 4. re-time to the authored pace and mux (a = scale_a from step 2)
+ffmpeg -ss <offset_b> -i media/<recording>.webm -i /tmp/soundtrack.wav \
+  -filter_complex "[0:v]setpts=(PTS-STARTPTS)/<a>,fps=30[v]" \
+  -map "[v]" -map 1:a -t 41.3 \
+  -c:v libx264 -profile:v high -pix_fmt yuv420p -crf 19 -preset slow \
+  -c:a aac -b:a 192k -movflags +faststart media/mobile-qa-showcase.mp4
+```
+
+Vertical cut:
+
+```bash
 SHOW_PAGE=docs/showcase/showcase-vertical.html VID_W=1080 VID_H=1920 SHOW_MS=42000 \
   node tools/record_showcase.mjs
-
-# transcode to a shareable MP4 with any full ffmpeg build (trim the black head)
-ffmpeg -ss 0.4 -i media/<recording>.webm \
-  -c:v libx264 -profile:v high -pix_fmt yuv420p -crf 19 -preset slow \
-  -movflags +faststart -an media/out.mp4
 ```
 
 Both source pages open standalone in any browser — no build step:
