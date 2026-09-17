@@ -6,316 +6,268 @@
 <title>Mobile QA Test Runner — Showcase</title>
 <style>
 /* ============================================================
-   MOBILE QA TEST RUNNER — cinematic showcase
-   Scene-driven, time-based CSS animation. Everything is keyed
-   off a single .play class added to <body> on load, using
-   absolute animation-delay values (seconds) so the timeline is
-   fully deterministic and records identically every time.
+   MOBILE QA TEST RUNNER — wide (16:9) product film.
+   Feature-rich, multi-screen, benefit-led. No engine internals:
+   nothing about how perception, matching, or recovery work — only
+   what the product does for you.
+   Deterministic, time-based CSS timeline keyed off body.play.
    Timeline (seconds):
-     S1 Title        0.0 -  5.0
-     S2 Problem      5.0 -  9.6
-     S3 Perception   9.6 - 17.8
-     S4 The run     17.8 - 26.8
-     S5 Recovery    26.8 - 32.4
-     S6 Stats       32.4 - 40.4
-     S7 Close       40.4 - 46.0
+     S1 Title        0.0 –  4.6
+     S2 Prefetch     4.6 – 11.8   (maps + captures your screens)
+     ACT Journey    11.8 – 35.2   (phone across app screens, captions swap)
+     S4 Report      35.2 – 47.6   (PASS / FAIL test cases)
+     S5 Close       47.6 – 53.6
    ============================================================ */
-
-@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&family=Inter:wght@400;500;600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;600&display=swap');
 
 :root{
-  --bg:#05060b;
-  --bg2:#0a0d16;
-  --ink:#eef2ff;
-  --muted:#8b93ad;
-  --accent:#38f5c8;       /* perception / OK */
-  --accent2:#7c5cff;      /* violet */
+  --bg:#04050a;
+  --ink:#f4f6fb;
+  --muted:#8a93a8;
+  --accent:#3fe0c5;      /* brand teal */
+  --accent2:#7c8cff;     /* soft violet */
+  --pass:#37e39b;
+  --fail:#ff5d78;
   --warn:#ffb454;
-  --bad:#ff5c7c;
   --line:rgba(255,255,255,.08);
   --W:1920px; --H:1080px;
+  --ease:cubic-bezier(.16,1,.3,1);
 }
-
 *{margin:0;padding:0;box-sizing:border-box}
-html,body{width:100%;height:100%;background:var(--bg);overflow:hidden}
-body{
-  font-family:'Inter',system-ui,sans-serif;
-  color:var(--ink);
-  -webkit-font-smoothing:antialiased;
-}
+html,body{width:100%;height:100%;background:#000;overflow:hidden}
+body{ font-family:'Inter',-apple-system,system-ui,sans-serif; color:var(--ink); -webkit-font-smoothing:antialiased; }
 
-/* Fixed 1080p stage so recording is exact */
 #stage{
-  position:fixed; inset:0;
-  width:var(--W); height:var(--H);
-  overflow:hidden;
+  position:fixed; inset:0; width:var(--W); height:var(--H); overflow:hidden;
   background:
-    radial-gradient(1200px 800px at 78% 18%, rgba(124,92,255,.16), transparent 60%),
-    radial-gradient(1000px 900px at 15% 85%, rgba(56,245,200,.12), transparent 60%),
-    linear-gradient(180deg,#06070d,#04050a 70%);
+    radial-gradient(1100px 720px at 80% 12%, rgba(124,140,255,.14), transparent 60%),
+    radial-gradient(1000px 820px at 14% 88%, rgba(63,224,197,.12), transparent 60%),
+    linear-gradient(180deg,#06070d,#04050a 72%);
 }
-/* faint grid */
-#stage::before{
-  content:""; position:absolute; inset:0;
-  background-image:
-    linear-gradient(rgba(255,255,255,.035) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255,255,255,.035) 1px, transparent 1px);
-  background-size:64px 64px;
-  mask-image:radial-gradient(circle at 50% 45%, black, transparent 82%);
-  opacity:.5;
-}
-/* vignette */
-#stage::after{
-  content:""; position:absolute; inset:0; pointer-events:none;
-  box-shadow:inset 0 0 340px 60px rgba(0,0,0,.75);
-}
+#stage::before{ content:""; position:absolute; inset:0;
+  background-image:linear-gradient(rgba(255,255,255,.03) 1px, transparent 1px),linear-gradient(90deg, rgba(255,255,255,.03) 1px, transparent 1px);
+  background-size:66px 66px; mask-image:radial-gradient(circle at 50% 45%, black, transparent 82%); opacity:.5; }
+#stage::after{ content:""; position:absolute; inset:0; pointer-events:none; box-shadow:inset 0 0 340px 60px rgba(0,0,0,.72); }
 
-.scene{
-  position:absolute; inset:0;
-  display:flex; flex-direction:column;
-  align-items:center; justify-content:center;
-  opacity:0;
-}
-body.play .scene{ animation-name:sceneFade; animation-timing-function:linear; animation-fill-mode:both; }
-@keyframes sceneFade{
-  0%{opacity:0} 6%{opacity:1} 88%{opacity:1} 100%{opacity:0}
-}
+.scene{ position:absolute; inset:0; display:flex; align-items:center; justify-content:center; opacity:0; }
+@keyframes fade{ 0%{opacity:0}7%{opacity:1}90%{opacity:1}100%{opacity:0} }
+.rise{ opacity:0; transform:translateY(28px) }
+body.play .rise{ animation:rise 1.05s var(--ease) both }
+@keyframes rise{ to{opacity:1;transform:none} }
+@keyframes pop{ from{opacity:0;transform:scale(.4)} to{opacity:1;transform:scale(1)} }
+@keyframes fadeOut{ to{opacity:0} }
+.gt{ background:linear-gradient(100deg,#fff 8%,var(--accent) 54%,var(--accent2) 96%); -webkit-background-clip:text; background-clip:text; color:transparent; }
 
-/* per-scene windows */
-body.play #s1{ animation-duration:5.0s;  animation-delay:0s;    }
-body.play #s2{ animation-duration:4.6s;  animation-delay:5.0s;  }
-body.play #s3{ animation-duration:8.2s;  animation-delay:9.6s;  }
-body.play #s4{ animation-duration:9.0s;  animation-delay:17.8s; }
-body.play #s5{ animation-duration:5.6s;  animation-delay:26.8s; }
-body.play #s6{ animation-duration:8.0s;  animation-delay:32.4s; }
-body.play #s7{ animation-duration:5.6s;  animation-delay:40.4s; }
+.eyebrow{ font-family:'JetBrains Mono',monospace; letter-spacing:.34em; text-transform:uppercase; font-size:15px; color:var(--accent); }
 
-/* ---------- helpers ---------- */
-.kicker{
-  font-family:'JetBrains Mono',monospace;
-  letter-spacing:.42em; text-transform:uppercase;
-  font-size:15px; color:var(--accent);
-  padding-left:.42em;
-}
-.up{opacity:0; transform:translateY(26px)}
-body.play .up{ animation:up .9s cubic-bezier(.2,.7,.2,1) both; }
-@keyframes up{ to{opacity:1;transform:none} }
-
-.gradient-text{
-  background:linear-gradient(100deg,#fff 10%,var(--accent) 55%,var(--accent2) 95%);
-  -webkit-background-clip:text; background-clip:text; color:transparent;
-}
-
-/* =========================================================
-   S1 — TITLE
-   ========================================================= */
-#s1 .kicker{ animation-delay:.5s; }
-#s1 h1{
-  font-family:'Space Grotesk',sans-serif;
-  font-weight:700; font-size:132px; line-height:1.0;
-  letter-spacing:-.02em; text-align:center; margin:22px 0 26px;
-}
-/* gradient must live on the spans themselves — a parent background-clip:text
-   does not paint through child boxes, so transparent children vanish. */
-#s1 h1 .l1, #s1 h1 .l2{
-  display:block;
-  background:linear-gradient(100deg,#fff 6%,var(--accent) 52%,var(--accent2) 96%);
-  -webkit-background-clip:text; background-clip:text; color:transparent;
-}
-#s1 h1 .l1{ animation-delay:.75s }
-#s1 h1 .l2{ animation-delay:.95s }
-#s1 .tag{
-  font-size:30px; color:var(--muted); font-weight:400; max-width:1080px; text-align:center;
-  animation-delay:1.5s;
-}
-#s1 .tag b{color:var(--ink); font-weight:600}
-/* sweeping light line */
-#s1 .rule{
-  margin-top:40px; height:2px; width:0; align-self:center;
-  background:linear-gradient(90deg,transparent,var(--accent),var(--accent2),transparent);
-  border-radius:2px;
-}
-body.play #s1 .rule{ animation:ruleGrow 1.4s cubic-bezier(.2,.7,.2,1) 1.9s both; }
-@keyframes ruleGrow{ from{width:0} to{width:720px} }
+/* ---------------- reusable phone ---------------- */
+.phone{ position:relative; width:360px; height:748px; border-radius:46px;
+  background:linear-gradient(160deg,#15151b,#0a0a0e); border:2px solid rgba(255,255,255,.10);
+  box-shadow:0 44px 120px rgba(0,0,0,.6), 0 0 0 6px #050506, inset 0 0 0 2px rgba(255,255,255,.04); padding:14px; }
+.phone .notch{ position:absolute; top:16px; left:50%; transform:translateX(-50%); width:120px;height:26px;background:#050506;border-radius:0 0 16px 16px;z-index:8 }
+.screen{ position:relative; width:100%; height:100%; border-radius:34px; overflow:hidden; background:linear-gradient(180deg,#131d31,#0b1020); }
+.appbar{ height:64px; background:linear-gradient(90deg,#1d2c54,#16234a); display:flex;align-items:center;justify-content:center;color:#dbe4ff;font-weight:600;font-size:18px;border-bottom:1px solid rgba(255,255,255,.06); gap:10px }
+.appbar .g{ width:22px;height:22px;border-radius:7px;background:linear-gradient(150deg,#5ff0d6,#2ea6ff) }
+.field{ position:relative; margin:22px 20px 0; height:52px;border-radius:12px;background:rgba(255,255,255,.06);border:1.4px solid rgba(255,255,255,.12);display:flex;align-items:center;padding:0 16px;color:#93a4cc;font-size:16px }
+.field .val{ color:#eaf0ff }
+.cta{ position:relative; margin:26px 20px 0; height:56px;border-radius:12px;background:linear-gradient(90deg,#3fe0c5,#22c3e6);display:flex;align-items:center;justify-content:center;color:#04231d;font-weight:800;font-size:18px;letter-spacing:.05em }
+/* product rows */
+.prow{ display:flex; align-items:center; gap:14px; margin:18px 20px 0 }
+.prow .img{ width:56px;height:56px;border-radius:12px;background:linear-gradient(150deg,#24406e,#182c4f);flex:0 0 auto }
+.prow .info{ flex:1 }
+.prow .nm{ font-size:15px;color:#eaf0ff;font-weight:600 }
+.prow .pr{ font-size:14px;color:var(--accent);margin-top:3px;font-family:'JetBrains Mono' }
+.prow .add{ width:64px;height:36px;border-radius:9px;background:rgba(63,224,197,.16);border:1px solid rgba(63,224,197,.4);color:var(--accent);font-size:13px;font-weight:700;display:flex;align-items:center;justify-content:center }
+/* cart total / done */
+.totbar{ position:absolute; left:20px; right:20px; bottom:24px }
+.totbar .t{ display:flex;justify-content:space-between;color:#cdd8ff;font-size:16px;margin-bottom:12px }
+.totbar .t b{ color:#fff }
+.doneScreen{ position:absolute; inset:0; background:linear-gradient(180deg,#0e2b25,#0b1020); display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px }
+.doneScreen .wc{ width:104px;height:104px;border-radius:50%;border:4px solid var(--pass);display:flex;align-items:center;justify-content:center;color:var(--pass);font-size:54px;font-weight:800 }
+.doneScreen .wt{ font-size:30px;font-weight:700 } .doneScreen .ws{ color:#9fb2d6;font-size:15px }
+/* app screen stack */
+.appscreen{ position:absolute; inset:0; opacity:0 }
+/* tap ripple */
+.tap{ position:absolute; width:26px;height:26px;border-radius:50%;background:rgba(255,255,255,.9);opacity:0;z-index:7;transform:translate(-50%,-50%) }
+@keyframes ripple{ 0%{opacity:.85;transform:translate(-50%,-50%) scale(.3)} 100%{opacity:0;transform:translate(-50%,-50%) scale(3.2)} }
+/* reticle + checks (perception, abstract) */
+.reticle{ position:absolute; border:2.4px solid var(--accent); border-radius:12px; box-shadow:0 0 0 5px rgba(63,224,197,.16),0 0 26px rgba(63,224,197,.5); opacity:0; z-index:6 }
+.chk{ position:absolute; width:32px;height:32px;border-radius:50%;background:var(--accent);color:#04231d;display:flex;align-items:center;justify-content:center;font-size:19px;font-weight:800;opacity:0;transform:scale(.4);z-index:7 }
+/* keyboard */
+.keyboard{ position:absolute; left:0;right:0;bottom:0;height:268px;z-index:7;background:linear-gradient(180deg,#20242e,#171a22);border-top:1px solid rgba(255,255,255,.08);border-radius:20px 20px 0 0;transform:translateY(100%);opacity:0;display:grid;grid-template-columns:repeat(10,1fr);grid-auto-rows:40px;gap:7px;padding:16px 12px }
+.keyboard i{ background:rgba(255,255,255,.08);border-radius:6px }
+/* shutter + thumbs */
+.shutter{ position:absolute; inset:0; background:#fff; opacity:0; z-index:9 }
+.thumb{ position:absolute; width:120px;height:210px;border-radius:16px;border:2px solid rgba(255,255,255,.16);background:linear-gradient(180deg,#182034,#0d1424);box-shadow:0 20px 50px rgba(0,0,0,.55);opacity:0;overflow:hidden;display:flex;flex-direction:column }
+.thumb .b{ height:26px;background:linear-gradient(90deg,#1d2c54,#16234a) }
+.thumb .l{ height:9px;margin:12px 10px 0;border-radius:5px;background:rgba(255,255,255,.10) }
+.thumb .tg{ margin-top:auto;padding:8px 0;text-align:center;font-size:12px;font-weight:700;letter-spacing:.08em;font-family:'JetBrains Mono' }
 
 /* =========================================================
-   S2 — THE PROBLEM
+   S1 TITLE
    ========================================================= */
-#s2 .prob{ text-align:center; }
-#s2 .kicker{color:var(--bad); animation-delay:5.2s}
-#s2 .lines{ margin-top:30px; font-family:'Space Grotesk',sans-serif; font-weight:600; font-size:78px; line-height:1.18; }
-#s2 .lines span{ display:block; }
-#s2 .lines .a{ animation-delay:5.45s }
-#s2 .lines .b{ animation-delay:5.75s; color:var(--muted) }
-#s2 .lines .c{ animation-delay:6.05s; color:var(--muted) }
-#s2 .lines .strike{ position:relative; color:var(--muted); }
-#s2 .lines .strike::after{
-  content:""; position:absolute; left:-4%; top:52%; height:6px; width:0;
-  background:var(--bad); border-radius:4px; box-shadow:0 0 22px var(--bad);
-}
-body.play #s2 .lines .strike::after{ animation:strike .5s ease 6.6s both; }
-@keyframes strike{ to{width:108%} }
-#s2 .fix{ margin-top:46px; font-size:34px; color:var(--ink); font-weight:500; animation-delay:7.2s; }
-#s2 .fix b{ color:var(--accent) }
+body.play #s1{ animation:fade 4.6s linear 0s both }
+#s1{ flex-direction:column }
+#s1 .mark{ width:86px;height:86px;border-radius:24px;position:relative;background:linear-gradient(155deg,#5ff0d6,#2ea6ff);box-shadow:0 0 56px rgba(63,224,197,.35);margin-bottom:34px;animation-delay:.3s }
+#s1 .mark::after{content:"";position:absolute;inset:16px;border-radius:12px;border:3.5px solid rgba(0,0,0,.82)}
+#s1 .mark::before{content:"";position:absolute;left:38px;top:24px;width:10px;height:10px;border-radius:50%;background:#04060b;z-index:2;box-shadow:0 25px 0 #04060b}
+#s1 h1{ font-weight:800;font-size:118px;letter-spacing:-.03em;line-height:1;text-align:center;margin-bottom:26px }
+#s1 h1 span{ display:inline-block; animation-delay:.55s }
+#s1 .tag{ font-size:31px;color:var(--muted);text-align:center;font-weight:400;animation-delay:1.15s }
 
 /* =========================================================
-   S3 — TWO-WAY PERCEPTION  (phone + tree + OCR)
+   S2 PREFETCH — maps + captures your screens
    ========================================================= */
-#s3{ flex-direction:row; gap:96px; }
-#s3 .left{ max-width:640px; }
-#s3 .kicker{ animation-delay:9.85s }
-#s3 h2{ font-family:'Space Grotesk',sans-serif; font-weight:700; font-size:76px; line-height:1.05; margin:20px 0 26px; letter-spacing:-.01em; animation-delay:10.05s;}
-#s3 .pt{ display:flex; gap:18px; align-items:flex-start; margin:22px 0; font-size:25px; color:var(--muted); }
-#s3 .pt b{ color:var(--ink); font-weight:600 }
-#s3 .pt .dot{ flex:0 0 auto; width:16px;height:16px;border-radius:50%; margin-top:8px; box-shadow:0 0 18px currentColor;}
-#s3 .p1{ animation-delay:10.6s } #s3 .p1 .dot{color:var(--accent)}
-#s3 .p2{ animation-delay:11.0s } #s3 .p2 .dot{color:var(--accent2)}
-#s3 .p3{ animation-delay:11.4s } #s3 .p3 .dot{color:var(--warn)}
-
-/* phone */
-.phone{
-  position:relative; width:340px; height:710px; border-radius:44px;
-  background:linear-gradient(160deg,#141826,#0a0d16);
-  border:2px solid rgba(255,255,255,.12);
-  box-shadow:0 40px 120px rgba(0,0,0,.6), inset 0 0 0 6px #05060b;
-  padding:16px;
-  animation-delay:10.1s;
-}
-.phone .notch{position:absolute; top:16px; left:50%; transform:translateX(-50%); width:120px;height:26px;background:#05060b;border-radius:0 0 16px 16px;z-index:5}
-.screen{ position:relative; width:100%; height:100%; border-radius:30px; overflow:hidden;
-  background:linear-gradient(180deg,#121a2e,#0b1020);
-}
-.appbar{ height:64px; background:linear-gradient(90deg,#1c2b52,#16234a); display:flex;align-items:center;justify-content:center;color:#cdd8ff;font-weight:600;font-size:17px;letter-spacing:.02em;border-bottom:1px solid rgba(255,255,255,.06)}
-.field{ margin:22px 20px 0; height:52px;border-radius:12px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);display:flex;align-items:center;padding:0 16px;color:#8ea0c8;font-size:16px}
-.field.focus{ border-color:var(--accent); box-shadow:0 0 0 3px rgba(56,245,200,.18)}
-.field .val{color:#eaf0ff}
-.cta{ margin:26px 20px 0; height:56px;border-radius:12px;background:linear-gradient(90deg,var(--accent),#2ad0ea);display:flex;align-items:center;justify-content:center;color:#04231d;font-weight:700;font-size:18px;letter-spacing:.04em}
-.welcome{ position:absolute; inset:0; background:linear-gradient(180deg,#0f2b24,#0b1020); display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;opacity:0}
-.welcome .big{font-family:'Space Grotesk';font-weight:700;font-size:34px;color:var(--accent)}
-.welcome .sub{color:#9fb2d6;font-size:16px}
-
-/* tree overlay */
-.tree{
-  position:absolute; right:-118px; top:120px; width:280px;
-  font-family:'JetBrains Mono',monospace; font-size:13.5px; color:#9fe9d5;
-  background:rgba(6,12,20,.82); border:1px solid rgba(56,245,200,.35);
-  border-radius:12px; padding:14px 16px; line-height:1.7;
-  box-shadow:0 20px 60px rgba(0,0,0,.5); opacity:0;
-  backdrop-filter:blur(4px);
-}
-.tree .k{color:var(--accent2)} .tree .s{color:#eaf0ff}
-body.play #s3 .tree{ animation:up .8s ease 12.0s both; }
-
-/* OCR scan */
-.scan{ position:absolute; left:16px; right:16px; top:96px; height:3px;
-  background:linear-gradient(90deg,transparent,var(--warn),transparent);
-  box-shadow:0 0 26px 6px rgba(255,180,84,.55); opacity:0; border-radius:2px}
-body.play #s3 .scan{ animation:scan 2.2s cubic-bezier(.6,0,.4,1) 12.6s 2 both; }
-@keyframes scan{ 0%{opacity:0;top:96px} 8%{opacity:1} 92%{opacity:1} 100%{opacity:0;top:560px} }
-.ocrtag{position:absolute; right:-96px; bottom:150px; font-family:'JetBrains Mono';font-size:13px;color:var(--warn);
-  border:1px solid rgba(255,180,84,.4);border-radius:8px;padding:6px 10px;background:rgba(6,12,20,.82);opacity:0}
-body.play #s3 .ocrtag{ animation:up .7s ease 13.4s both }
+body.play #s2{ animation:fade 7.2s linear 4.6s both }
+#s2{ flex-direction:column }
+#s2 .eyebrow{ animation-delay:4.9s }
+#s2 h2{ font-weight:700;font-size:62px;letter-spacing:-.02em;text-align:center;margin:18px 0 8px;animation-delay:5.05s }
+#s2 .sub{ font-size:25px;color:var(--muted);margin-bottom:44px;animation-delay:5.25s }
+#s2 .grid{ display:grid;grid-template-columns:repeat(4,180px);grid-template-rows:repeat(2,240px);gap:26px }
+.cap-thumb{ position:relative;border-radius:18px;border:1.5px solid var(--line);background:linear-gradient(180deg,#101a2e,#0a0f1d);overflow:hidden;opacity:0;transform:translateY(24px) scale(.96) }
+.cap-thumb .b{ height:34px;background:linear-gradient(90deg,#1d2c54,#16234a) }
+.cap-thumb .l{ height:10px;margin:14px 14px 0;border-radius:5px;background:rgba(255,255,255,.09) }
+.cap-thumb .name{ position:absolute;bottom:10px;left:0;right:0;text-align:center;font-family:'JetBrains Mono';font-size:14px;color:#9fb2d6 }
+.cap-thumb .flash{ position:absolute;inset:0;background:#fff;opacity:0 }
+.cap-thumb .dot{ position:absolute;top:12px;right:12px;width:12px;height:12px;border-radius:50%;background:var(--accent);opacity:0;box-shadow:0 0 12px var(--accent) }
+body.play .cap-thumb{ animation:capIn .7s var(--ease) both }
+@keyframes capIn{ to{opacity:1;transform:none} }
+body.play .cap-thumb .flash{ animation:capFlash .5s ease-out both }
+@keyframes capFlash{ 0%{opacity:0}30%{opacity:.8}100%{opacity:0} }
+body.play .cap-thumb .dot{ animation:pop .4s var(--ease) both }
+/* stagger 8 thumbs from ~6.0s */
+#s2 .g1{animation-delay:6.0s}   #s2 .g1 .flash{animation-delay:6.0s}  #s2 .g1 .dot{animation-delay:6.4s}
+#s2 .g2{animation-delay:6.35s}  #s2 .g2 .flash{animation-delay:6.35s} #s2 .g2 .dot{animation-delay:6.75s}
+#s2 .g3{animation-delay:6.7s}   #s2 .g3 .flash{animation-delay:6.7s}  #s2 .g3 .dot{animation-delay:7.1s}
+#s2 .g4{animation-delay:7.05s}  #s2 .g4 .flash{animation-delay:7.05s} #s2 .g4 .dot{animation-delay:7.45s}
+#s2 .g5{animation-delay:7.4s}   #s2 .g5 .flash{animation-delay:7.4s}  #s2 .g5 .dot{animation-delay:7.8s}
+#s2 .g6{animation-delay:7.75s}  #s2 .g6 .flash{animation-delay:7.75s} #s2 .g6 .dot{animation-delay:8.15s}
+#s2 .g7{animation-delay:8.1s}   #s2 .g7 .flash{animation-delay:8.1s}  #s2 .g7 .dot{animation-delay:8.5s}
+#s2 .g8{animation-delay:8.45s}  #s2 .g8 .flash{animation-delay:8.45s} #s2 .g8 .dot{animation-delay:8.85s}
+#s2 .foot{ margin-top:40px;font-size:22px;color:var(--muted);animation-delay:9.3s }
+#s2 .foot b{ color:var(--ink);font-weight:600 }
 
 /* =========================================================
-   S4 — THE RUN  (terminal + live steps)
+   ACT — phone journey with swapping captions
    ========================================================= */
-#s4{ flex-direction:row; gap:70px; }
-#s4 .term{
-  width:960px; background:#0a0e18; border:1px solid var(--line); border-radius:18px;
-  box-shadow:0 40px 120px rgba(0,0,0,.55); overflow:hidden; animation-delay:18.0s;
+body.play #act{ animation:fade 23.4s linear 11.8s both }
+#act{ gap:110px }
+#act .left{ width:600px }
+#act .caps{ position:relative; height:360px }
+.cap{ position:absolute; top:0; left:0; opacity:0 }
+.cap .eyebrow{ margin-bottom:16px; display:block }
+.cap h2{ font-weight:700;font-size:64px;letter-spacing:-.025em;line-height:1.08 }
+.cap h2 .dim{ color:var(--muted) }
+.cap p{ margin-top:22px;font-size:24px;color:var(--muted);max-width:520px;line-height:1.45 }
+body.play .cap{ animation-name:capCycle;animation-timing-function:var(--ease);animation-fill-mode:both }
+@keyframes capCycle{ 0%{opacity:0;transform:translateY(22px)}12%{opacity:1;transform:none}86%{opacity:1;transform:none}100%{opacity:0;transform:translateY(-14px)} }
+body.play #cap1{ animation-duration:5.6s; animation-delay:12.2s }
+body.play #cap2{ animation-duration:5.6s; animation-delay:18.0s }
+body.play #cap3{ animation-duration:5.6s; animation-delay:23.6s }
+body.play #cap4{ animation-duration:5.6s; animation-delay:29.2s }
+
+.phonewrap{ opacity:0 }
+body.play .phonewrap{ animation:rise 1.3s var(--ease) 12.1s both, bob 7s ease-in-out 13.4s infinite }
+@keyframes bob{ 0%,100%{margin-top:0}50%{margin-top:-14px} }
+
+/* inner app-screen windows (cross-fade) */
+@keyframes show{ 0%{opacity:0}8%{opacity:1}92%{opacity:1}100%{opacity:0} }
+body.play #scLogin{    animation:show 4.4s linear 12.4s both }
+body.play #scProducts{ animation:show 7.2s linear 16.6s both }   /* holds through cap2 */
+body.play #scCheckout{ animation:show 5.6s linear 23.6s both }   /* abuts products, ~0.2s overlap */
+body.play #scDone{     animation:show 5.6s linear 29.0s both }
+
+/* taps */
+body.play .tapLogin{ animation:ripple .7s ease-out 14.4s both }
+body.play .tapAdd{ animation:ripple .7s ease-out 17.2s both }
+body.play .tapCheckout{ animation:ripple .7s ease-out 22.0s both }
+
+/* reticle path over the products screen (cap2) */
+body.play #ret{ animation:retMove 5.0s var(--ease) 18.4s both }
+@keyframes retMove{
+  0%{opacity:0}   8%{opacity:1}
+  0%,24%   { top:210px; left:20px; width:200px; height:56px }   /* row 1 add */
+  40%,56%  { top:288px; left:20px; width:200px; height:56px }   /* row 2 add */
+  72%,90%  { top:366px; left:20px; width:200px; height:56px }   /* row 3 add */
+  100%{opacity:0; top:366px; left:20px; width:200px; height:56px }
 }
-.term .bar{ height:46px; background:#0e1424; display:flex;align-items:center;gap:9px;padding:0 18px;border-bottom:1px solid var(--line)}
-.term .bar i{width:13px;height:13px;border-radius:50%}
-.term .bar .r{background:#ff5f57}.term .bar .y{background:#febc2e}.term .bar .g{background:#28c840}
-.term .bar span{margin-left:14px;color:#6f7a95;font-family:'JetBrains Mono';font-size:14px}
-.term .body{ padding:26px 30px; font-family:'JetBrains Mono',monospace; font-size:22px; line-height:1.85; min-height:520px }
-.term .cmd{ color:#eaf0ff }
-.term .cmd .p{ color:var(--accent) }
-.term .cmd .flag{ color:var(--accent2) }
-.typed{ display:inline-block; overflow:hidden; white-space:nowrap; vertical-align:bottom; width:0 }
-body.play #s4 .typed{ animation:type 1.7s steps(38,end) 18.4s both; }
-@keyframes type{ to{width:37ch} }
-.caret{ display:inline-block; width:12px; height:24px; background:var(--accent); vertical-align:-4px; margin-left:2px }
-body.play #s4 .caret{ animation:blink .7s steps(1) infinite, caretHide .1s linear 20.3s forwards }
-@keyframes blink{ 50%{opacity:0} }
-@keyframes caretHide{ to{opacity:0; display:none} }
+body.play #ck1{ animation:pop .5s var(--ease) 19.0s both, fadeOut .5s linear 22.8s forwards }
+body.play #ck2{ animation:pop .5s var(--ease) 20.1s both, fadeOut .5s linear 22.8s forwards }
+body.play #ck3{ animation:pop .5s var(--ease) 21.2s both, fadeOut .5s linear 22.8s forwards }
 
-.log{ opacity:0; }
-.log .ok{color:var(--accent)} .log .mut{color:var(--muted)} .log .warn{color:var(--warn)}
-body.play #s4 .l0{ animation:up .4s ease 20.4s both }
-body.play #s4 .l1{ animation:up .4s ease 20.9s both }
-body.play #s4 .l2{ animation:up .4s ease 21.5s both }
-body.play #s4 .l3{ animation:up .4s ease 22.4s both }
-body.play #s4 .l4{ animation:up .4s ease 23.1s both }
-body.play #s4 .l5{ animation:up .4s ease 23.7s both }
-body.play #s4 .l6{ animation:up .5s ease 24.5s both }
-#s4 .l6{ font-size:26px; margin-top:8px }
-#s4 .l6 .pass{ background:rgba(56,245,200,.14); color:var(--accent); padding:2px 14px;border-radius:8px;border:1px solid rgba(56,245,200,.4); font-weight:700}
+/* keyboard obstruction during cap3 (checkout) */
+body.play #kb{ animation:kbUp .6s var(--ease) 24.2s both, kbDown .7s var(--ease) 26.6s forwards }
+@keyframes kbUp{ from{transform:translateY(100%);opacity:0} to{transform:translateY(0);opacity:1} }
+@keyframes kbDown{ from{transform:translateY(0);opacity:1} to{transform:translateY(100%);opacity:0} }
+body.play #clearPulse{ animation:clearPulse 1.2s ease-out 27.2s both }
+@keyframes clearPulse{ 0%{opacity:1;box-shadow:0 0 0 0 rgba(63,224,197,.5)}100%{opacity:0;box-shadow:0 0 0 34px rgba(63,224,197,0)} }
 
-/* right: evidence card */
-#s4 .side{ width:430px; display:flex; flex-direction:column; gap:20px; animation-delay:21.0s;}
-#s4 .ev{ background:rgba(10,14,24,.7); border:1px solid var(--line); border-radius:16px; padding:22px 24px }
-#s4 .ev h4{ font-family:'JetBrains Mono'; font-size:14px; letter-spacing:.2em; text-transform:uppercase; color:var(--muted); margin-bottom:14px }
-#s4 .ev .row{ display:flex; justify-content:space-between; font-size:19px; padding:9px 0; border-bottom:1px dashed rgba(255,255,255,.07) }
-#s4 .ev .row:last-child{border:0}
-#s4 .ev .row b{ color:var(--accent); font-family:'JetBrains Mono' }
-#s4 .ev .row .v2{ color:var(--accent2); font-family:'JetBrains Mono' }
+/* evidence capture during cap4 (done) */
+body.play #shot{ animation:capFlash .5s ease-out 30.0s both }
+body.play #thBefore{ animation:thL 1.1s var(--ease) 30.6s both, fadeOut .6s linear 33.8s forwards }
+body.play #thAfter{ animation:thR 1.1s var(--ease) 31.1s both, fadeOut .6s linear 33.8s forwards }
+@keyframes thL{ from{opacity:0;transform:translate(40px,0) rotate(0)} to{opacity:1;transform:translate(0,0) rotate(-7deg)} }
+@keyframes thR{ from{opacity:0;transform:translate(-40px,0) rotate(0)} to{opacity:1;transform:translate(0,0) rotate(7deg)} }
 
 /* =========================================================
-   S5 — RECOVERY LADDER
+   S4 REPORT — PASS / FAIL test cases
    ========================================================= */
-#s5 .kicker{ animation-delay:27.0s }
-#s5 h2{ font-family:'Space Grotesk'; font-weight:700; font-size:70px; margin:18px 0 12px; text-align:center; animation-delay:27.2s }
-#s5 .sub{ font-size:26px; color:var(--muted); margin-bottom:44px; text-align:center; animation-delay:27.45s }
-#s5 .ladder{ display:flex; gap:18px; align-items:center }
-#s5 .rung{
-  background:rgba(10,14,24,.75); border:1px solid var(--line); border-radius:14px;
-  padding:20px 22px; min-width:150px; text-align:center;
-}
-#s5 .rung .n{ font-family:'JetBrains Mono'; font-size:13px; color:var(--muted) }
-#s5 .rung .t{ font-family:'Space Grotesk'; font-weight:600; font-size:23px; margin-top:8px }
-#s5 .rung.win{ border-color:var(--accent); box-shadow:0 0 0 3px rgba(56,245,200,.18), 0 20px 60px rgba(56,245,200,.12) }
-#s5 .rung.win .t{ color:var(--accent) }
-#s5 .arrow{ color:var(--muted); font-size:26px }
-#s5 .r1{animation-delay:27.9s}#s5 .r2{animation-delay:28.2s}#s5 .r3{animation-delay:28.5s}
-#s5 .r4{animation-delay:28.8s}#s5 .r5{animation-delay:29.1s}#s5 .r6{animation-delay:29.4s}
-#s5 .a1{animation-delay:28.05s}#s5 .a2{animation-delay:28.35s}#s5 .a3{animation-delay:28.65s}
-#s5 .a4{animation-delay:28.95s}#s5 .a5{animation-delay:29.25s}
-#s5 .r6{ animation:up .5s ease 29.4s both, winGlow .7s ease 30.4s both }
-@keyframes winGlow{ from{box-shadow:0 0 0 0 rgba(56,245,200,0)} to{box-shadow:0 0 0 3px rgba(56,245,200,.18),0 20px 60px rgba(56,245,200,.12)} }
+body.play #s4{ animation:fade 12.4s linear 35.2s both }
+#s4{ flex-direction:column }
+#s4 .head{ width:1200px; display:flex; align-items:flex-end; justify-content:space-between; margin-bottom:20px }
+#s4 .head .eyebrow{ animation-delay:35.5s; display:block; margin-bottom:10px }
+#s4 .head h2{ font-weight:700; font-size:56px; letter-spacing:-.02em; animation-delay:35.6s }
+#s4 .head .when{ font-family:'JetBrains Mono'; font-size:18px; color:var(--muted); animation-delay:35.8s }
+.reportcard{ width:1200px; background:rgba(9,12,20,.82); border:1px solid var(--line); border-radius:20px; box-shadow:0 50px 130px rgba(0,0,0,.55); overflow:hidden; animation-delay:35.4s }
+.rc-top{ height:52px; background:#0e1424; display:flex; align-items:center; gap:9px; padding:0 20px; border-bottom:1px solid var(--line) }
+.rc-top i{ width:12px;height:12px;border-radius:50% } .rc-top .r{background:#ff5f57}.rc-top .y{background:#febc2e}.rc-top .g{background:#28c840}
+.rc-top span{ margin-left:12px;color:#6f7a95;font-family:'JetBrains Mono';font-size:14px }
+.rc-body{ display:flex }
+.rc-left{ width:340px; padding:34px 32px; border-right:1px solid var(--line) }
+.summary{ display:flex; gap:18px; margin-bottom:26px }
+.stile{ flex:1; text-align:center; padding:18px 6px; border-radius:14px; background:rgba(255,255,255,.03) }
+.stile .n{ font-size:52px; font-weight:800; line-height:1 } .stile.p .n{color:var(--pass)} .stile.f .n{color:var(--fail)}
+.stile .l{ margin-top:8px; font-size:15px; color:var(--muted) }
+.ring{ position:relative; width:200px;height:200px;margin:8px auto 0;border-radius:50%;
+  background:conic-gradient(var(--pass) 0 288deg, rgba(255,93,120,.55) 288deg 360deg); }
+.ring::after{ content:"";position:absolute;inset:20px;border-radius:50%;background:#0a0e18 }
+.ring .val{ position:absolute; inset:0; display:flex;flex-direction:column;align-items:center;justify-content:center }
+.ring .val b{ font-size:46px;font-weight:800 } .ring .val small{ color:var(--muted);font-size:15px;margin-top:2px }
+.rc-right{ flex:1; padding:22px 30px }
+.trow{ display:flex; align-items:center; gap:16px; padding:15px 6px; border-bottom:1px dashed rgba(255,255,255,.07); opacity:0 }
+.trow .st{ width:76px;height:32px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:800;letter-spacing:.05em;flex:0 0 auto }
+.trow .st.pass{ background:rgba(55,227,155,.14);color:var(--pass);border:1px solid rgba(55,227,155,.4) }
+.trow .st.fail{ background:rgba(255,93,120,.14);color:var(--fail);border:1px solid rgba(255,93,120,.45) }
+.trow .nm{ flex:1;font-size:20px;color:#eef2fb;font-weight:500 }
+.trow .dur{ font-family:'JetBrains Mono';font-size:16px;color:var(--muted) }
+body.play .trow{ animation:rowIn .5s var(--ease) both }
+@keyframes rowIn{ from{opacity:0;transform:translateX(20px)} to{opacity:1;transform:none} }
+#s4 .t1{animation-delay:36.1s}#s4 .t2{animation-delay:36.3s}#s4 .t3{animation-delay:36.5s}
+#s4 .t4{animation-delay:36.7s}#s4 .t5{animation-delay:36.9s}#s4 .t6{animation-delay:37.1s}
+.faildetail{ margin:6px 6px 0; border-radius:14px; background:rgba(255,93,120,.06); border:1px solid rgba(255,93,120,.25); padding:18px 20px; display:flex; gap:20px; align-items:center; opacity:0 }
+.faildetail .thumbs{ display:flex; gap:12px }
+.faildetail .mini{ width:74px;height:132px;border-radius:10px;overflow:hidden;border:1px solid rgba(255,255,255,.14);background:linear-gradient(180deg,#182034,#0d1424);display:flex;flex-direction:column }
+.faildetail .mini .b{ height:20px } .faildetail .mini.b1 .b{background:linear-gradient(90deg,#1d2c54,#16234a)} .faildetail .mini.b2 .b{background:linear-gradient(90deg,#5a2233,#3a1622)}
+.faildetail .mini .ll{ height:7px;margin:9px 8px 0;border-radius:4px;background:rgba(255,255,255,.10) }
+.faildetail .mini .cap{ margin-top:auto;text-align:center;font-size:11px;font-family:'JetBrains Mono';padding:5px 0 }
+.faildetail .txt .h{ font-size:19px;font-weight:700;color:var(--fail);margin-bottom:8px }
+.faildetail .txt .r{ font-size:17px;color:#c8d2e6;margin:4px 0 }
+.faildetail .txt .r b{ color:#fff } .faildetail .txt .r .g{ color:var(--pass) } .faildetail .txt .r .bad{ color:var(--fail) }
+body.play #failrow{ animation:rowIn .6s var(--ease) 37.5s both }
 
 /* =========================================================
-   S6 — STATS
+   S5 CLOSE
    ========================================================= */
-#s6 .kicker{ animation-delay:32.6s }
-#s6 h2{ font-family:'Space Grotesk';font-weight:700;font-size:64px;margin:16px 0 50px;text-align:center;animation-delay:32.8s }
-#s6 .grid{ display:grid; grid-template-columns:repeat(3,300px); gap:30px 34px; }
-#s6 .stat{ background:rgba(10,14,24,.6); border:1px solid var(--line); border-radius:18px; padding:34px 30px; text-align:center; }
-#s6 .stat .num{ font-family:'Space Grotesk'; font-weight:700; font-size:74px; line-height:1; }
-#s6 .stat .num.g{ color:var(--accent) } #s6 .stat .num.v{ color:var(--accent2) } #s6 .stat .num.w{ color:var(--warn) }
-#s6 .stat .lab{ margin-top:14px; color:var(--muted); font-size:20px }
-#s6 .c1{animation-delay:33.2s}#s6 .c2{animation-delay:33.4s}#s6 .c3{animation-delay:33.6s}
-#s6 .c4{animation-delay:33.8s}#s6 .c5{animation-delay:34.0s}#s6 .c6{animation-delay:34.2s}
-
-/* =========================================================
-   S7 — CLOSE
-   ========================================================= */
-#s7 .logo{ display:flex; align-items:center; gap:22px; animation-delay:40.7s }
-#s7 .mark{ width:74px;height:74px;border-radius:20px;position:relative;background:linear-gradient(150deg,var(--accent),var(--accent2));box-shadow:0 0 50px rgba(56,245,200,.4)}
-#s7 .mark::after{content:"";position:absolute;inset:14px;border-radius:10px;border:3px solid rgba(4,6,11,.85)}
-#s7 .mark::before{content:"";position:absolute;left:33px;top:20px;width:9px;height:9px;border-radius:50%;background:#04060b;z-index:2;box-shadow:0 22px 0 #04060b}
-#s7 h1{ font-family:'Space Grotesk';font-weight:700;font-size:88px }
-#s7 .principles{ margin-top:34px; display:flex; gap:20px; animation-delay:41.2s }
-#s7 .principles span{ font-family:'JetBrains Mono'; font-size:22px; color:var(--muted); }
-#s7 .principles b{ color:var(--accent) }
-#s7 .dotsep{ color:var(--line) }
-#s7 .repo{ margin-top:50px; font-family:'JetBrains Mono'; font-size:24px; color:var(--muted); animation-delay:41.7s }
-#s7 .repo b{ color:var(--ink) }
-#s7 .rule{ margin-top:34px; height:2px; width:0; background:linear-gradient(90deg,transparent,var(--accent),var(--accent2),transparent); border-radius:2px }
-body.play #s7 .rule{ animation:ruleGrow2 1.2s cubic-bezier(.2,.7,.2,1) 42.0s both }
-@keyframes ruleGrow2{ from{width:0} to{width:640px} }
-
-/* welcome reveal in phone during S3 hold (subtle) */
+body.play #s5{ animation:fade 6.0s linear 47.6s both }
+#s5{ flex-direction:column }
+#s5 .mark{ width:92px;height:92px;border-radius:25px;position:relative;background:linear-gradient(155deg,#5ff0d6,#2ea6ff);box-shadow:0 0 60px rgba(63,224,197,.4);margin-bottom:38px;animation-delay:47.9s }
+#s5 .mark::after{content:"";position:absolute;inset:17px;border-radius:12px;border:4px solid rgba(0,0,0,.82)}
+#s5 .mark::before{content:"";position:absolute;left:41px;top:26px;width:11px;height:11px;border-radius:50%;background:#04060b;z-index:2;box-shadow:0 27px 0 #04060b}
+#s5 h1{ font-weight:700;font-size:88px;letter-spacing:-.03em;text-align:center;line-height:1.04;animation-delay:48.05s }
+#s5 .principles{ margin-top:34px;font-size:29px;color:var(--muted);font-weight:500;animation-delay:48.4s }
+#s5 .principles b{ color:var(--ink);font-weight:600 }
+#s5 .repo{ margin-top:52px;font-family:'JetBrains Mono';font-size:24px;color:var(--muted);animation-delay:48.8s }
+#s5 .repo b{ color:var(--ink) }
 </style>
 </head>
 <body>
@@ -323,165 +275,160 @@ body.play #s7 .rule{ animation:ruleGrow2 1.2s cubic-bezier(.2,.7,.2,1) 42.0s bot
 
   <!-- S1 TITLE -->
   <section class="scene" id="s1">
-    <div class="kicker up">Deterministic mobile UI testing</div>
-    <h1 class="gradient-text">
-      <span class="l1 up">Mobile QA</span>
-      <span class="l2 up">Test Runner</span>
-    </h1>
-    <p class="tag up">It reads the screen like a <b>human</b>.<br>It decides like a <b>machine</b>.</p>
-    <div class="rule"></div>
+    <div class="mark rise"></div>
+    <h1 class="gt"><span class="rise">Mobile QA Test Runner</span></h1>
+    <p class="tag rise">Automated testing that drives your app the way people do.</p>
   </section>
 
-  <!-- S2 PROBLEM -->
+  <!-- S2 PREFETCH -->
   <section class="scene" id="s2">
-    <div class="prob">
-      <div class="kicker up">The problem with UI tests</div>
-      <div class="lines">
-        <span class="a up strike">Selectors break.</span>
-        <span class="b up">Screens shift.</span>
-        <span class="c up">Tests lie.</span>
-      </div>
-      <p class="fix up">So we test by <b>intent</b> — the labels a user actually sees.</p>
-    </div>
-  </section>
-
-  <!-- S3 PERCEPTION -->
-  <section class="scene" id="s3">
-    <div class="left">
-      <div class="kicker up">Perception-first engine</div>
-      <h2 class="up">Sees the screen<br>two ways.</h2>
-      <div class="pt p1 up"><span class="dot"></span><div><b>UI hierarchy.</b> The accessibility tree — fast, exact, structural.</div></div>
-      <div class="pt p2 up"><span class="dot"></span><div><b>Screenshot + OCR.</b> For text the tree never exposes.</div></div>
-      <div class="pt p3 up"><span class="dot"></span><div><b>One Observation</b> per screen — consumed by every layer.</div></div>
-    </div>
-    <div class="phone up">
-      <div class="notch"></div>
-      <div class="screen">
-        <div class="appbar">Swag&nbsp;Labs</div>
-        <div class="field focus">Username&nbsp;·&nbsp;<span class="val">test@shop.io</span></div>
-        <div class="field">••••••••••</div>
-        <div class="cta">LOGIN</div>
-        <div class="scan"></div>
-      </div>
-      <div class="tree">
-        <div>&lt;<span class="k">Button</span> <span class="s">text="LOGIN"</span></div>
-        <div>&nbsp;&nbsp;<span class="s">id="btn_login"</span></div>
-        <div>&nbsp;&nbsp;<span class="s">clickable=true /&gt;</span></div>
-        <div>&lt;<span class="k">EditText</span> <span class="s">id="email"/&gt;</span></div>
-      </div>
-      <div class="ocrtag">OCR ✓ "LOGIN" · 0.97</div>
-    </div>
-  </section>
-
-  <!-- S4 THE RUN -->
-  <section class="scene" id="s4">
-    <div class="term">
-      <div class="bar"><i class="r"></i><i class="y"></i><i class="g"></i><span>zsh — mobile-qa</span></div>
-      <div class="body">
-        <div class="cmd"><span class="p">❯</span> <span class="typed">python cli.py --apk shop.apk --test login</span><span class="caret"></span></div>
-        <div class="log l0"><span class="mut">▸ launch</span> com.saucelabs.shop <span class="ok">✓</span></div>
-        <div class="log l1"><span class="mut">▸ type</span> "Username" ← test@shop.io <span class="ok">✓</span></div>
-        <div class="log l2"><span class="mut">▸ type</span> "Password" ← •••••••• <span class="ok">✓</span></div>
-        <div class="log l3"><span class="mut">▸ tap</span> "Login" <span class="warn">recover→scroll</span> <span class="ok">✓</span></div>
-        <div class="log l4"><span class="mut">▸ assert</span> text_exists "Welcome" <span class="ok">✓ hierarchy</span></div>
-        <div class="log l5"><span class="mut">▸ assert</span> ocr_text_exists "PAY NOW" <span class="ok">✓ ocr 0.94</span></div>
-        <div class="log l6">overall &nbsp;<span class="pass">PASS</span> &nbsp;<span class="mut">→ reports/run_8f2/report.html</span></div>
-      </div>
-    </div>
-    <div class="side">
-      <div class="ev">
-        <h4>Step evidence</h4>
-        <div class="row"><span>resolved_by</span><b>ranked · 0.91</b></div>
-        <div class="row"><span>validated_by</span><b>hierarchy</b></div>
-        <div class="row"><span>recovery</span><span class="v2">scroll → OCR</span></div>
-        <div class="row"><span>selector</span><span class="v2">learned ✎</span></div>
-      </div>
-      <div class="ev">
-        <h4>Every step captures</h4>
-        <div class="row"><span>before / after</span><b>.png</b></div>
-        <div class="row"><span>hierarchy</span><b>.xml</b></div>
-        <div class="row"><span>timeline</span><b>.json</b></div>
-        <div class="row"><span>report</span><span class="v2">.html</span></div>
-      </div>
-    </div>
-  </section>
-
-  <!-- S5 RECOVERY -->
-  <section class="scene" id="s5">
-    <div class="kicker up">When a target won't resolve</div>
-    <h2 class="up">It recovers before it gives up.</h2>
-    <div class="sub up">A bounded, deterministic ladder — each rung recorded as evidence.</div>
-    <div class="ladder">
-      <div class="rung r1 up"><div class="n">01</div><div class="t">Retry</div></div>
-      <div class="arrow a1 up">→</div>
-      <div class="rung r2 up"><div class="n">02</div><div class="t">Keyboard</div></div>
-      <div class="arrow a2 up">→</div>
-      <div class="rung r3 up"><div class="n">03</div><div class="t">Dialog</div></div>
-      <div class="arrow a3 up">→</div>
-      <div class="rung r4 up"><div class="n">04</div><div class="t">Scroll</div></div>
-      <div class="arrow a4 up">→</div>
-      <div class="rung r5 up"><div class="n">05</div><div class="t">Bearing</div></div>
-      <div class="arrow a5 up">→</div>
-      <div class="rung r6 up win"><div class="n">06</div><div class="t">OCR ✓</div></div>
-    </div>
-  </section>
-
-  <!-- S6 STATS -->
-  <section class="scene" id="s6">
-    <div class="kicker up">Built to hold up</div>
-    <h2 class="up">Small surface. Serious rigor.</h2>
+    <div class="eyebrow rise">Preflight</div>
+    <h2 class="rise">Maps your app first.</h2>
+    <div class="sub rise">Every screen explored and captured — before a single test runs.</div>
     <div class="grid">
-      <div class="stat c1 up"><div class="num g" data-to="6897" data-suffix="">0</div><div class="lab">lines of Python</div></div>
-      <div class="stat c2 up"><div class="num v" data-to="102" data-suffix="">0</div><div class="lab">passing tests</div></div>
-      <div class="stat c3 up"><div class="num g" data-to="19" data-suffix="">0</div><div class="lab">engine modules</div></div>
-      <div class="stat c4 up"><div class="num w" data-to="74" data-suffix="%">0</div><div class="lab">fewer device reads</div></div>
-      <div class="stat c5 up"><div class="num v" data-to="0" data-text="51→29s">0</div><div class="lab">run time, cut</div></div>
-      <div class="stat c6 up"><div class="num g" data-to="0" data-text="0">0</div><div class="lab">Android needed for CI</div></div>
+      <div class="cap-thumb g1"><div class="dot"></div><div class="b"></div><div class="l" style="width:70%"></div><div class="l" style="width:50%"></div><div class="name">Login</div><div class="flash"></div></div>
+      <div class="cap-thumb g2"><div class="dot"></div><div class="b"></div><div class="l" style="width:60%"></div><div class="l" style="width:80%"></div><div class="name">Products</div><div class="flash"></div></div>
+      <div class="cap-thumb g3"><div class="dot"></div><div class="b"></div><div class="l" style="width:80%"></div><div class="l" style="width:55%"></div><div class="name">Item</div><div class="flash"></div></div>
+      <div class="cap-thumb g4"><div class="dot"></div><div class="b"></div><div class="l" style="width:65%"></div><div class="l" style="width:70%"></div><div class="name">Cart</div><div class="flash"></div></div>
+      <div class="cap-thumb g5"><div class="dot"></div><div class="b"></div><div class="l" style="width:75%"></div><div class="l" style="width:50%"></div><div class="name">Checkout</div><div class="flash"></div></div>
+      <div class="cap-thumb g6"><div class="dot"></div><div class="b"></div><div class="l" style="width:55%"></div><div class="l" style="width:75%"></div><div class="name">Menu</div><div class="flash"></div></div>
+      <div class="cap-thumb g7"><div class="dot"></div><div class="b"></div><div class="l" style="width:70%"></div><div class="l" style="width:60%"></div><div class="name">Account</div><div class="flash"></div></div>
+      <div class="cap-thumb g8"><div class="dot"></div><div class="b"></div><div class="l" style="width:60%"></div><div class="l" style="width:80%"></div><div class="name">Confirm</div><div class="flash"></div></div>
+    </div>
+    <div class="foot rise">So it <b>knows where everything lives</b> — and never taps blindly.</div>
+  </section>
+
+  <!-- ACT: phone journey -->
+  <section class="scene" id="act">
+    <div class="left">
+      <div class="caps">
+        <div class="cap" id="cap1"><span class="eyebrow">Automation</span><h2>It drives your<br>whole app.</h2><p>Taps, types and swipes through real flows — login to checkout — on its own.</p></div>
+        <div class="cap" id="cap2"><span class="eyebrow">Perception</span><h2>Finds every control.<br><span class="dim">Reads every label.</span></h2><p>Works from what's on screen, the same words a person sees.</p></div>
+        <div class="cap" id="cap3"><span class="eyebrow">Resilience</span><h2>Something in the way?<br><span class="dim">It finds another.</span></h2><p>A keyboard or popup won't stop it — it clears the path and carries on.</p></div>
+        <div class="cap" id="cap4"><span class="eyebrow">Evidence</span><h2>Every step,<br>captured as proof.</h2><p>Before and after each action — saved, so nothing is a mystery later.</p></div>
+      </div>
+    </div>
+
+    <div class="phonewrap">
+      <div class="phone">
+        <div class="notch"></div>
+        <div class="screen">
+
+          <!-- login -->
+          <div class="appscreen" id="scLogin">
+            <div class="appbar"><span class="g"></span>Swag&nbsp;Labs</div>
+            <div class="field">Username&nbsp;·&nbsp;<span class="val">test@shop.io</span></div>
+            <div class="field">••••••••••</div>
+            <div class="cta">LOGIN</div>
+            <div class="tap tapLogin" style="left:180px;top:360px"></div>
+          </div>
+
+          <!-- products -->
+          <div class="appscreen" id="scProducts">
+            <div class="appbar">Products</div>
+            <div class="prow"><div class="img"></div><div class="info"><div class="nm">Backpack</div><div class="pr">$29.99</div></div><div class="add">ADD</div></div>
+            <div class="prow"><div class="img"></div><div class="info"><div class="nm">Bike Light</div><div class="pr">$9.99</div></div><div class="add">ADD</div></div>
+            <div class="prow"><div class="img"></div><div class="info"><div class="nm">Bolt T-Shirt</div><div class="pr">$15.99</div></div><div class="add">ADD</div></div>
+            <div class="prow"><div class="img"></div><div class="info"><div class="nm">Fleece Jacket</div><div class="pr">$49.99</div></div><div class="add">ADD</div></div>
+            <div class="cta" style="margin-top:30px">GO TO CART</div>
+            <div class="tap tapAdd" style="left:300px;top:230px"></div>
+            <!-- perception overlays -->
+            <div class="reticle" id="ret"></div>
+            <div class="chk" id="ck1" style="left:288px;top:222px">✓</div>
+            <div class="chk" id="ck2" style="left:288px;top:300px">✓</div>
+            <div class="chk" id="ck3" style="left:288px;top:378px">✓</div>
+          </div>
+
+          <!-- checkout -->
+          <div class="appscreen" id="scCheckout">
+            <div class="appbar">Checkout</div>
+            <div class="field">Full name&nbsp;·&nbsp;<span class="val">Alex Doe</span></div>
+            <div class="field">Address&nbsp;·&nbsp;<span class="val">1 Market St</span></div>
+            <div class="field">Card&nbsp;·&nbsp;<span class="val">•••• 4242</span></div>
+            <div class="cta">PLACE ORDER</div>
+            <div class="tap tapCheckout" style="left:180px;top:360px"></div>
+            <div class="reticle" id="clearPulse" style="left:20px;top:334px;width:320px;height:56px;border:none"></div>
+            <div class="keyboard" id="kb">
+              <i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i>
+              <i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i>
+              <i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i>
+            </div>
+          </div>
+
+          <!-- done -->
+          <div class="appscreen" id="scDone">
+            <div class="doneScreen">
+              <div class="wc">✓</div>
+              <div class="wt">Order placed</div>
+              <div class="ws">Thank you for your order</div>
+            </div>
+            <div class="shutter" id="shot"></div>
+          </div>
+
+        </div>
+      </div>
+      <!-- evidence thumbs float beside the phone -->
+      <div class="thumb" id="thBefore" style="left:-70px;top:210px"><div class="b"></div><div class="l" style="width:70%"></div><div class="l" style="width:50%"></div><div class="tg" style="color:var(--muted)">BEFORE</div></div>
+      <div class="thumb" id="thAfter" style="right:-70px;top:320px"><div class="b"></div><div class="l" style="width:60%"></div><div class="l" style="width:80%"></div><div class="tg" style="color:var(--pass)">AFTER · PASS</div></div>
     </div>
   </section>
 
-  <!-- S7 CLOSE -->
-  <section class="scene" id="s7">
-    <div class="logo">
-      <div class="mark"></div>
-      <h1 class="gradient-text">Mobile QA Test Runner</h1>
+  <!-- S4 REPORT -->
+  <section class="scene" id="s4">
+    <div class="head">
+      <div>
+        <span class="eyebrow rise">Results</span>
+        <h2 class="rise">One clear report.</h2>
+      </div>
+      <div class="when rise">run 8f2 · 10 test cases · 47s</div>
     </div>
-    <div class="principles">
-      <span><b>Deterministic</b></span><span class="dotsep">·</span>
-      <span><b>Self-healing</b></span><span class="dotsep">·</span>
-      <span><b>Evidence-first</b></span>
+    <div class="reportcard rise">
+      <div class="rc-top"><i class="r"></i><i class="y"></i><i class="g"></i><span>report.html</span></div>
+      <div class="rc-body">
+        <div class="rc-left">
+          <div class="summary">
+            <div class="stile p"><div class="n">8</div><div class="l">Passed</div></div>
+            <div class="stile f"><div class="n">2</div><div class="l">Failed</div></div>
+          </div>
+          <div class="ring"><div class="val"><b>80%</b><small>pass rate</small></div></div>
+        </div>
+        <div class="rc-right">
+          <div class="trow t1"><div class="st pass">PASS</div><div class="nm">Login with valid credentials</div><div class="dur">3.1s</div></div>
+          <div class="trow t2"><div class="st pass">PASS</div><div class="nm">Add item to cart</div><div class="dur">2.4s</div></div>
+          <div class="trow t3"><div class="st pass">PASS</div><div class="nm">Cart shows correct total</div><div class="dur">1.9s</div></div>
+          <div class="trow t4" id="failrowline"><div class="st fail">FAIL</div><div class="nm">Checkout with expired card</div><div class="dur">4.2s</div></div>
+          <div class="faildetail" id="failrow">
+            <div class="thumbs">
+              <div class="mini b1"><div class="b"></div><div class="ll" style="width:70%"></div><div class="ll" style="width:50%"></div><div class="cap" style="color:var(--muted)">before</div></div>
+              <div class="mini b2"><div class="b"></div><div class="ll" style="width:60%"></div><div class="ll" style="width:75%"></div><div class="cap" style="color:var(--fail)">after</div></div>
+            </div>
+            <div class="txt">
+              <div class="h">Likely defect</div>
+              <div class="r">Expected <b>“Order placed”</b> <span class="g">✓</span></div>
+              <div class="r">Got <b>“Payment declined”</b> <span class="bad">✕</span></div>
+            </div>
+          </div>
+          <div class="trow t5"><div class="st pass">PASS</div><div class="nm">Empty cart shows message</div><div class="dur">1.6s</div></div>
+          <div class="trow t6"><div class="st pass">PASS</div><div class="nm">Sign out returns to login</div><div class="dur">2.0s</div></div>
+        </div>
+      </div>
     </div>
-    <div class="repo">sicariusa/<b>mobile-testing</b></div>
-    <div class="rule"></div>
+  </section>
+
+  <!-- S5 CLOSE -->
+  <section class="scene" id="s5">
+    <div class="mark rise"></div>
+    <h1 class="gt rise">Mobile QA Test Runner</h1>
+    <div class="principles rise"><b>Automatic</b> &nbsp;·&nbsp; <b>Resilient</b> &nbsp;·&nbsp; <b>Proof for every step</b></div>
+    <div class="repo rise">sicariusa/<b>mobile-testing</b></div>
   </section>
 
 </div>
-
 <script>
-// Kick the timeline on next frame so fonts/layout settle first.
-function counterTween(el){
-  const to = parseFloat(el.dataset.to||"0");
-  const suffix = el.dataset.suffix||"";
-  const text = el.dataset.text;
-  if(text!==undefined && to===0){ el.textContent = text; return; }
-  const dur = 1400, start = performance.now();
-  function step(now){
-    const p = Math.min(1,(now-start)/dur);
-    const e = 1-Math.pow(1-p,3);
-    el.textContent = Math.round(to*e).toLocaleString() + suffix;
-    if(p<1) requestAnimationFrame(step);
-  }
-  requestAnimationFrame(step);
-}
 window.addEventListener('load', ()=>{
   requestAnimationFrame(()=>{
     document.body.classList.add('play');
-    // stat counters fire at S6 start (~33.2s)
-    document.querySelectorAll('#s6 .num').forEach((el,i)=>{
-      setTimeout(()=>counterTween(el), 33200 + i*200);
-    });
-    // signal for the recorder
-    setTimeout(()=>{ window.__DONE__ = true; }, 46000);
+    setTimeout(()=>{ window.__DONE__ = true; }, 54000);
   });
 });
 </script>
