@@ -1,0 +1,489 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mobile QA Test Runner — Showcase</title>
+<style>
+/* ============================================================
+   MOBILE QA TEST RUNNER — cinematic showcase
+   Scene-driven, time-based CSS animation. Everything is keyed
+   off a single .play class added to <body> on load, using
+   absolute animation-delay values (seconds) so the timeline is
+   fully deterministic and records identically every time.
+   Timeline (seconds):
+     S1 Title        0.0 -  5.0
+     S2 Problem      5.0 -  9.6
+     S3 Perception   9.6 - 17.8
+     S4 The run     17.8 - 26.8
+     S5 Recovery    26.8 - 32.4
+     S6 Stats       32.4 - 40.4
+     S7 Close       40.4 - 46.0
+   ============================================================ */
+
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&family=Inter:wght@400;500;600&display=swap');
+
+:root{
+  --bg:#05060b;
+  --bg2:#0a0d16;
+  --ink:#eef2ff;
+  --muted:#8b93ad;
+  --accent:#38f5c8;       /* perception / OK */
+  --accent2:#7c5cff;      /* violet */
+  --warn:#ffb454;
+  --bad:#ff5c7c;
+  --line:rgba(255,255,255,.08);
+  --W:1920px; --H:1080px;
+}
+
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{width:100%;height:100%;background:var(--bg);overflow:hidden}
+body{
+  font-family:'Inter',system-ui,sans-serif;
+  color:var(--ink);
+  -webkit-font-smoothing:antialiased;
+}
+
+/* Fixed 1080p stage so recording is exact */
+#stage{
+  position:fixed; inset:0;
+  width:var(--W); height:var(--H);
+  overflow:hidden;
+  background:
+    radial-gradient(1200px 800px at 78% 18%, rgba(124,92,255,.16), transparent 60%),
+    radial-gradient(1000px 900px at 15% 85%, rgba(56,245,200,.12), transparent 60%),
+    linear-gradient(180deg,#06070d,#04050a 70%);
+}
+/* faint grid */
+#stage::before{
+  content:""; position:absolute; inset:0;
+  background-image:
+    linear-gradient(rgba(255,255,255,.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255,255,255,.035) 1px, transparent 1px);
+  background-size:64px 64px;
+  mask-image:radial-gradient(circle at 50% 45%, black, transparent 82%);
+  opacity:.5;
+}
+/* vignette */
+#stage::after{
+  content:""; position:absolute; inset:0; pointer-events:none;
+  box-shadow:inset 0 0 340px 60px rgba(0,0,0,.75);
+}
+
+.scene{
+  position:absolute; inset:0;
+  display:flex; flex-direction:column;
+  align-items:center; justify-content:center;
+  opacity:0;
+}
+body.play .scene{ animation-name:sceneFade; animation-timing-function:linear; animation-fill-mode:both; }
+@keyframes sceneFade{
+  0%{opacity:0} 6%{opacity:1} 88%{opacity:1} 100%{opacity:0}
+}
+
+/* per-scene windows */
+body.play #s1{ animation-duration:5.0s;  animation-delay:0s;    }
+body.play #s2{ animation-duration:4.6s;  animation-delay:5.0s;  }
+body.play #s3{ animation-duration:8.2s;  animation-delay:9.6s;  }
+body.play #s4{ animation-duration:9.0s;  animation-delay:17.8s; }
+body.play #s5{ animation-duration:5.6s;  animation-delay:26.8s; }
+body.play #s6{ animation-duration:8.0s;  animation-delay:32.4s; }
+body.play #s7{ animation-duration:5.6s;  animation-delay:40.4s; }
+
+/* ---------- helpers ---------- */
+.kicker{
+  font-family:'JetBrains Mono',monospace;
+  letter-spacing:.42em; text-transform:uppercase;
+  font-size:15px; color:var(--accent);
+  padding-left:.42em;
+}
+.up{opacity:0; transform:translateY(26px)}
+body.play .up{ animation:up .9s cubic-bezier(.2,.7,.2,1) both; }
+@keyframes up{ to{opacity:1;transform:none} }
+
+.gradient-text{
+  background:linear-gradient(100deg,#fff 10%,var(--accent) 55%,var(--accent2) 95%);
+  -webkit-background-clip:text; background-clip:text; color:transparent;
+}
+
+/* =========================================================
+   S1 — TITLE
+   ========================================================= */
+#s1 .kicker{ animation-delay:.5s; }
+#s1 h1{
+  font-family:'Space Grotesk',sans-serif;
+  font-weight:700; font-size:132px; line-height:1.0;
+  letter-spacing:-.02em; text-align:center; margin:22px 0 26px;
+}
+/* gradient must live on the spans themselves — a parent background-clip:text
+   does not paint through child boxes, so transparent children vanish. */
+#s1 h1 .l1, #s1 h1 .l2{
+  display:block;
+  background:linear-gradient(100deg,#fff 6%,var(--accent) 52%,var(--accent2) 96%);
+  -webkit-background-clip:text; background-clip:text; color:transparent;
+}
+#s1 h1 .l1{ animation-delay:.75s }
+#s1 h1 .l2{ animation-delay:.95s }
+#s1 .tag{
+  font-size:30px; color:var(--muted); font-weight:400; max-width:1080px; text-align:center;
+  animation-delay:1.5s;
+}
+#s1 .tag b{color:var(--ink); font-weight:600}
+/* sweeping light line */
+#s1 .rule{
+  margin-top:40px; height:2px; width:0; align-self:center;
+  background:linear-gradient(90deg,transparent,var(--accent),var(--accent2),transparent);
+  border-radius:2px;
+}
+body.play #s1 .rule{ animation:ruleGrow 1.4s cubic-bezier(.2,.7,.2,1) 1.9s both; }
+@keyframes ruleGrow{ from{width:0} to{width:720px} }
+
+/* =========================================================
+   S2 — THE PROBLEM
+   ========================================================= */
+#s2 .prob{ text-align:center; }
+#s2 .kicker{color:var(--bad); animation-delay:5.2s}
+#s2 .lines{ margin-top:30px; font-family:'Space Grotesk',sans-serif; font-weight:600; font-size:78px; line-height:1.18; }
+#s2 .lines span{ display:block; }
+#s2 .lines .a{ animation-delay:5.45s }
+#s2 .lines .b{ animation-delay:5.75s; color:var(--muted) }
+#s2 .lines .c{ animation-delay:6.05s; color:var(--muted) }
+#s2 .lines .strike{ position:relative; color:var(--muted); }
+#s2 .lines .strike::after{
+  content:""; position:absolute; left:-4%; top:52%; height:6px; width:0;
+  background:var(--bad); border-radius:4px; box-shadow:0 0 22px var(--bad);
+}
+body.play #s2 .lines .strike::after{ animation:strike .5s ease 6.6s both; }
+@keyframes strike{ to{width:108%} }
+#s2 .fix{ margin-top:46px; font-size:34px; color:var(--ink); font-weight:500; animation-delay:7.2s; }
+#s2 .fix b{ color:var(--accent) }
+
+/* =========================================================
+   S3 — TWO-WAY PERCEPTION  (phone + tree + OCR)
+   ========================================================= */
+#s3{ flex-direction:row; gap:96px; }
+#s3 .left{ max-width:640px; }
+#s3 .kicker{ animation-delay:9.85s }
+#s3 h2{ font-family:'Space Grotesk',sans-serif; font-weight:700; font-size:76px; line-height:1.05; margin:20px 0 26px; letter-spacing:-.01em; animation-delay:10.05s;}
+#s3 .pt{ display:flex; gap:18px; align-items:flex-start; margin:22px 0; font-size:25px; color:var(--muted); }
+#s3 .pt b{ color:var(--ink); font-weight:600 }
+#s3 .pt .dot{ flex:0 0 auto; width:16px;height:16px;border-radius:50%; margin-top:8px; box-shadow:0 0 18px currentColor;}
+#s3 .p1{ animation-delay:10.6s } #s3 .p1 .dot{color:var(--accent)}
+#s3 .p2{ animation-delay:11.0s } #s3 .p2 .dot{color:var(--accent2)}
+#s3 .p3{ animation-delay:11.4s } #s3 .p3 .dot{color:var(--warn)}
+
+/* phone */
+.phone{
+  position:relative; width:340px; height:710px; border-radius:44px;
+  background:linear-gradient(160deg,#141826,#0a0d16);
+  border:2px solid rgba(255,255,255,.12);
+  box-shadow:0 40px 120px rgba(0,0,0,.6), inset 0 0 0 6px #05060b;
+  padding:16px;
+  animation-delay:10.1s;
+}
+.phone .notch{position:absolute; top:16px; left:50%; transform:translateX(-50%); width:120px;height:26px;background:#05060b;border-radius:0 0 16px 16px;z-index:5}
+.screen{ position:relative; width:100%; height:100%; border-radius:30px; overflow:hidden;
+  background:linear-gradient(180deg,#121a2e,#0b1020);
+}
+.appbar{ height:64px; background:linear-gradient(90deg,#1c2b52,#16234a); display:flex;align-items:center;justify-content:center;color:#cdd8ff;font-weight:600;font-size:17px;letter-spacing:.02em;border-bottom:1px solid rgba(255,255,255,.06)}
+.field{ margin:22px 20px 0; height:52px;border-radius:12px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);display:flex;align-items:center;padding:0 16px;color:#8ea0c8;font-size:16px}
+.field.focus{ border-color:var(--accent); box-shadow:0 0 0 3px rgba(56,245,200,.18)}
+.field .val{color:#eaf0ff}
+.cta{ margin:26px 20px 0; height:56px;border-radius:12px;background:linear-gradient(90deg,var(--accent),#2ad0ea);display:flex;align-items:center;justify-content:center;color:#04231d;font-weight:700;font-size:18px;letter-spacing:.04em}
+.welcome{ position:absolute; inset:0; background:linear-gradient(180deg,#0f2b24,#0b1020); display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;opacity:0}
+.welcome .big{font-family:'Space Grotesk';font-weight:700;font-size:34px;color:var(--accent)}
+.welcome .sub{color:#9fb2d6;font-size:16px}
+
+/* tree overlay */
+.tree{
+  position:absolute; right:-118px; top:120px; width:280px;
+  font-family:'JetBrains Mono',monospace; font-size:13.5px; color:#9fe9d5;
+  background:rgba(6,12,20,.82); border:1px solid rgba(56,245,200,.35);
+  border-radius:12px; padding:14px 16px; line-height:1.7;
+  box-shadow:0 20px 60px rgba(0,0,0,.5); opacity:0;
+  backdrop-filter:blur(4px);
+}
+.tree .k{color:var(--accent2)} .tree .s{color:#eaf0ff}
+body.play #s3 .tree{ animation:up .8s ease 12.0s both; }
+
+/* OCR scan */
+.scan{ position:absolute; left:16px; right:16px; top:96px; height:3px;
+  background:linear-gradient(90deg,transparent,var(--warn),transparent);
+  box-shadow:0 0 26px 6px rgba(255,180,84,.55); opacity:0; border-radius:2px}
+body.play #s3 .scan{ animation:scan 2.2s cubic-bezier(.6,0,.4,1) 12.6s 2 both; }
+@keyframes scan{ 0%{opacity:0;top:96px} 8%{opacity:1} 92%{opacity:1} 100%{opacity:0;top:560px} }
+.ocrtag{position:absolute; right:-96px; bottom:150px; font-family:'JetBrains Mono';font-size:13px;color:var(--warn);
+  border:1px solid rgba(255,180,84,.4);border-radius:8px;padding:6px 10px;background:rgba(6,12,20,.82);opacity:0}
+body.play #s3 .ocrtag{ animation:up .7s ease 13.4s both }
+
+/* =========================================================
+   S4 — THE RUN  (terminal + live steps)
+   ========================================================= */
+#s4{ flex-direction:row; gap:70px; }
+#s4 .term{
+  width:960px; background:#0a0e18; border:1px solid var(--line); border-radius:18px;
+  box-shadow:0 40px 120px rgba(0,0,0,.55); overflow:hidden; animation-delay:18.0s;
+}
+.term .bar{ height:46px; background:#0e1424; display:flex;align-items:center;gap:9px;padding:0 18px;border-bottom:1px solid var(--line)}
+.term .bar i{width:13px;height:13px;border-radius:50%}
+.term .bar .r{background:#ff5f57}.term .bar .y{background:#febc2e}.term .bar .g{background:#28c840}
+.term .bar span{margin-left:14px;color:#6f7a95;font-family:'JetBrains Mono';font-size:14px}
+.term .body{ padding:26px 30px; font-family:'JetBrains Mono',monospace; font-size:22px; line-height:1.85; min-height:520px }
+.term .cmd{ color:#eaf0ff }
+.term .cmd .p{ color:var(--accent) }
+.term .cmd .flag{ color:var(--accent2) }
+.typed{ display:inline-block; overflow:hidden; white-space:nowrap; vertical-align:bottom; width:0 }
+body.play #s4 .typed{ animation:type 1.7s steps(38,end) 18.4s both; }
+@keyframes type{ to{width:37ch} }
+.caret{ display:inline-block; width:12px; height:24px; background:var(--accent); vertical-align:-4px; margin-left:2px }
+body.play #s4 .caret{ animation:blink .7s steps(1) infinite, caretHide .1s linear 20.3s forwards }
+@keyframes blink{ 50%{opacity:0} }
+@keyframes caretHide{ to{opacity:0; display:none} }
+
+.log{ opacity:0; }
+.log .ok{color:var(--accent)} .log .mut{color:var(--muted)} .log .warn{color:var(--warn)}
+body.play #s4 .l0{ animation:up .4s ease 20.4s both }
+body.play #s4 .l1{ animation:up .4s ease 20.9s both }
+body.play #s4 .l2{ animation:up .4s ease 21.5s both }
+body.play #s4 .l3{ animation:up .4s ease 22.4s both }
+body.play #s4 .l4{ animation:up .4s ease 23.1s both }
+body.play #s4 .l5{ animation:up .4s ease 23.7s both }
+body.play #s4 .l6{ animation:up .5s ease 24.5s both }
+#s4 .l6{ font-size:26px; margin-top:8px }
+#s4 .l6 .pass{ background:rgba(56,245,200,.14); color:var(--accent); padding:2px 14px;border-radius:8px;border:1px solid rgba(56,245,200,.4); font-weight:700}
+
+/* right: evidence card */
+#s4 .side{ width:430px; display:flex; flex-direction:column; gap:20px; animation-delay:21.0s;}
+#s4 .ev{ background:rgba(10,14,24,.7); border:1px solid var(--line); border-radius:16px; padding:22px 24px }
+#s4 .ev h4{ font-family:'JetBrains Mono'; font-size:14px; letter-spacing:.2em; text-transform:uppercase; color:var(--muted); margin-bottom:14px }
+#s4 .ev .row{ display:flex; justify-content:space-between; font-size:19px; padding:9px 0; border-bottom:1px dashed rgba(255,255,255,.07) }
+#s4 .ev .row:last-child{border:0}
+#s4 .ev .row b{ color:var(--accent); font-family:'JetBrains Mono' }
+#s4 .ev .row .v2{ color:var(--accent2); font-family:'JetBrains Mono' }
+
+/* =========================================================
+   S5 — RECOVERY LADDER
+   ========================================================= */
+#s5 .kicker{ animation-delay:27.0s }
+#s5 h2{ font-family:'Space Grotesk'; font-weight:700; font-size:70px; margin:18px 0 12px; text-align:center; animation-delay:27.2s }
+#s5 .sub{ font-size:26px; color:var(--muted); margin-bottom:44px; text-align:center; animation-delay:27.45s }
+#s5 .ladder{ display:flex; gap:18px; align-items:center }
+#s5 .rung{
+  background:rgba(10,14,24,.75); border:1px solid var(--line); border-radius:14px;
+  padding:20px 22px; min-width:150px; text-align:center;
+}
+#s5 .rung .n{ font-family:'JetBrains Mono'; font-size:13px; color:var(--muted) }
+#s5 .rung .t{ font-family:'Space Grotesk'; font-weight:600; font-size:23px; margin-top:8px }
+#s5 .rung.win{ border-color:var(--accent); box-shadow:0 0 0 3px rgba(56,245,200,.18), 0 20px 60px rgba(56,245,200,.12) }
+#s5 .rung.win .t{ color:var(--accent) }
+#s5 .arrow{ color:var(--muted); font-size:26px }
+#s5 .r1{animation-delay:27.9s}#s5 .r2{animation-delay:28.2s}#s5 .r3{animation-delay:28.5s}
+#s5 .r4{animation-delay:28.8s}#s5 .r5{animation-delay:29.1s}#s5 .r6{animation-delay:29.4s}
+#s5 .a1{animation-delay:28.05s}#s5 .a2{animation-delay:28.35s}#s5 .a3{animation-delay:28.65s}
+#s5 .a4{animation-delay:28.95s}#s5 .a5{animation-delay:29.25s}
+#s5 .r6{ animation:up .5s ease 29.4s both, winGlow .7s ease 30.4s both }
+@keyframes winGlow{ from{box-shadow:0 0 0 0 rgba(56,245,200,0)} to{box-shadow:0 0 0 3px rgba(56,245,200,.18),0 20px 60px rgba(56,245,200,.12)} }
+
+/* =========================================================
+   S6 — STATS
+   ========================================================= */
+#s6 .kicker{ animation-delay:32.6s }
+#s6 h2{ font-family:'Space Grotesk';font-weight:700;font-size:64px;margin:16px 0 50px;text-align:center;animation-delay:32.8s }
+#s6 .grid{ display:grid; grid-template-columns:repeat(3,300px); gap:30px 34px; }
+#s6 .stat{ background:rgba(10,14,24,.6); border:1px solid var(--line); border-radius:18px; padding:34px 30px; text-align:center; }
+#s6 .stat .num{ font-family:'Space Grotesk'; font-weight:700; font-size:74px; line-height:1; }
+#s6 .stat .num.g{ color:var(--accent) } #s6 .stat .num.v{ color:var(--accent2) } #s6 .stat .num.w{ color:var(--warn) }
+#s6 .stat .lab{ margin-top:14px; color:var(--muted); font-size:20px }
+#s6 .c1{animation-delay:33.2s}#s6 .c2{animation-delay:33.4s}#s6 .c3{animation-delay:33.6s}
+#s6 .c4{animation-delay:33.8s}#s6 .c5{animation-delay:34.0s}#s6 .c6{animation-delay:34.2s}
+
+/* =========================================================
+   S7 — CLOSE
+   ========================================================= */
+#s7 .logo{ display:flex; align-items:center; gap:22px; animation-delay:40.7s }
+#s7 .mark{ width:74px;height:74px;border-radius:20px;position:relative;background:linear-gradient(150deg,var(--accent),var(--accent2));box-shadow:0 0 50px rgba(56,245,200,.4)}
+#s7 .mark::after{content:"";position:absolute;inset:14px;border-radius:10px;border:3px solid rgba(4,6,11,.85)}
+#s7 .mark::before{content:"";position:absolute;left:33px;top:20px;width:9px;height:9px;border-radius:50%;background:#04060b;z-index:2;box-shadow:0 22px 0 #04060b}
+#s7 h1{ font-family:'Space Grotesk';font-weight:700;font-size:88px }
+#s7 .principles{ margin-top:34px; display:flex; gap:20px; animation-delay:41.2s }
+#s7 .principles span{ font-family:'JetBrains Mono'; font-size:22px; color:var(--muted); }
+#s7 .principles b{ color:var(--accent) }
+#s7 .dotsep{ color:var(--line) }
+#s7 .repo{ margin-top:50px; font-family:'JetBrains Mono'; font-size:24px; color:var(--muted); animation-delay:41.7s }
+#s7 .repo b{ color:var(--ink) }
+#s7 .rule{ margin-top:34px; height:2px; width:0; background:linear-gradient(90deg,transparent,var(--accent),var(--accent2),transparent); border-radius:2px }
+body.play #s7 .rule{ animation:ruleGrow2 1.2s cubic-bezier(.2,.7,.2,1) 42.0s both }
+@keyframes ruleGrow2{ from{width:0} to{width:640px} }
+
+/* welcome reveal in phone during S3 hold (subtle) */
+</style>
+</head>
+<body>
+<div id="stage">
+
+  <!-- S1 TITLE -->
+  <section class="scene" id="s1">
+    <div class="kicker up">Deterministic mobile UI testing</div>
+    <h1 class="gradient-text">
+      <span class="l1 up">Mobile QA</span>
+      <span class="l2 up">Test Runner</span>
+    </h1>
+    <p class="tag up">It reads the screen like a <b>human</b>.<br>It decides like a <b>machine</b>.</p>
+    <div class="rule"></div>
+  </section>
+
+  <!-- S2 PROBLEM -->
+  <section class="scene" id="s2">
+    <div class="prob">
+      <div class="kicker up">The problem with UI tests</div>
+      <div class="lines">
+        <span class="a up strike">Selectors break.</span>
+        <span class="b up">Screens shift.</span>
+        <span class="c up">Tests lie.</span>
+      </div>
+      <p class="fix up">So we test by <b>intent</b> — the labels a user actually sees.</p>
+    </div>
+  </section>
+
+  <!-- S3 PERCEPTION -->
+  <section class="scene" id="s3">
+    <div class="left">
+      <div class="kicker up">Perception-first engine</div>
+      <h2 class="up">Sees the screen<br>two ways.</h2>
+      <div class="pt p1 up"><span class="dot"></span><div><b>UI hierarchy.</b> The accessibility tree — fast, exact, structural.</div></div>
+      <div class="pt p2 up"><span class="dot"></span><div><b>Screenshot + OCR.</b> For text the tree never exposes.</div></div>
+      <div class="pt p3 up"><span class="dot"></span><div><b>One Observation</b> per screen — consumed by every layer.</div></div>
+    </div>
+    <div class="phone up">
+      <div class="notch"></div>
+      <div class="screen">
+        <div class="appbar">Swag&nbsp;Labs</div>
+        <div class="field focus">Username&nbsp;·&nbsp;<span class="val">test@shop.io</span></div>
+        <div class="field">••••••••••</div>
+        <div class="cta">LOGIN</div>
+        <div class="scan"></div>
+      </div>
+      <div class="tree">
+        <div>&lt;<span class="k">Button</span> <span class="s">text="LOGIN"</span></div>
+        <div>&nbsp;&nbsp;<span class="s">id="btn_login"</span></div>
+        <div>&nbsp;&nbsp;<span class="s">clickable=true /&gt;</span></div>
+        <div>&lt;<span class="k">EditText</span> <span class="s">id="email"/&gt;</span></div>
+      </div>
+      <div class="ocrtag">OCR ✓ "LOGIN" · 0.97</div>
+    </div>
+  </section>
+
+  <!-- S4 THE RUN -->
+  <section class="scene" id="s4">
+    <div class="term">
+      <div class="bar"><i class="r"></i><i class="y"></i><i class="g"></i><span>zsh — mobile-qa</span></div>
+      <div class="body">
+        <div class="cmd"><span class="p">❯</span> <span class="typed">python cli.py --apk shop.apk --test login</span><span class="caret"></span></div>
+        <div class="log l0"><span class="mut">▸ launch</span> com.saucelabs.shop <span class="ok">✓</span></div>
+        <div class="log l1"><span class="mut">▸ type</span> "Username" ← test@shop.io <span class="ok">✓</span></div>
+        <div class="log l2"><span class="mut">▸ type</span> "Password" ← •••••••• <span class="ok">✓</span></div>
+        <div class="log l3"><span class="mut">▸ tap</span> "Login" <span class="warn">recover→scroll</span> <span class="ok">✓</span></div>
+        <div class="log l4"><span class="mut">▸ assert</span> text_exists "Welcome" <span class="ok">✓ hierarchy</span></div>
+        <div class="log l5"><span class="mut">▸ assert</span> ocr_text_exists "PAY NOW" <span class="ok">✓ ocr 0.94</span></div>
+        <div class="log l6">overall &nbsp;<span class="pass">PASS</span> &nbsp;<span class="mut">→ reports/run_8f2/report.html</span></div>
+      </div>
+    </div>
+    <div class="side">
+      <div class="ev">
+        <h4>Step evidence</h4>
+        <div class="row"><span>resolved_by</span><b>ranked · 0.91</b></div>
+        <div class="row"><span>validated_by</span><b>hierarchy</b></div>
+        <div class="row"><span>recovery</span><span class="v2">scroll → OCR</span></div>
+        <div class="row"><span>selector</span><span class="v2">learned ✎</span></div>
+      </div>
+      <div class="ev">
+        <h4>Every step captures</h4>
+        <div class="row"><span>before / after</span><b>.png</b></div>
+        <div class="row"><span>hierarchy</span><b>.xml</b></div>
+        <div class="row"><span>timeline</span><b>.json</b></div>
+        <div class="row"><span>report</span><span class="v2">.html</span></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- S5 RECOVERY -->
+  <section class="scene" id="s5">
+    <div class="kicker up">When a target won't resolve</div>
+    <h2 class="up">It recovers before it gives up.</h2>
+    <div class="sub up">A bounded, deterministic ladder — each rung recorded as evidence.</div>
+    <div class="ladder">
+      <div class="rung r1 up"><div class="n">01</div><div class="t">Retry</div></div>
+      <div class="arrow a1 up">→</div>
+      <div class="rung r2 up"><div class="n">02</div><div class="t">Keyboard</div></div>
+      <div class="arrow a2 up">→</div>
+      <div class="rung r3 up"><div class="n">03</div><div class="t">Dialog</div></div>
+      <div class="arrow a3 up">→</div>
+      <div class="rung r4 up"><div class="n">04</div><div class="t">Scroll</div></div>
+      <div class="arrow a4 up">→</div>
+      <div class="rung r5 up"><div class="n">05</div><div class="t">Bearing</div></div>
+      <div class="arrow a5 up">→</div>
+      <div class="rung r6 up win"><div class="n">06</div><div class="t">OCR ✓</div></div>
+    </div>
+  </section>
+
+  <!-- S6 STATS -->
+  <section class="scene" id="s6">
+    <div class="kicker up">Built to hold up</div>
+    <h2 class="up">Small surface. Serious rigor.</h2>
+    <div class="grid">
+      <div class="stat c1 up"><div class="num g" data-to="6897" data-suffix="">0</div><div class="lab">lines of Python</div></div>
+      <div class="stat c2 up"><div class="num v" data-to="102" data-suffix="">0</div><div class="lab">passing tests</div></div>
+      <div class="stat c3 up"><div class="num g" data-to="19" data-suffix="">0</div><div class="lab">engine modules</div></div>
+      <div class="stat c4 up"><div class="num w" data-to="74" data-suffix="%">0</div><div class="lab">fewer device reads</div></div>
+      <div class="stat c5 up"><div class="num v" data-to="0" data-text="51→29s">0</div><div class="lab">run time, cut</div></div>
+      <div class="stat c6 up"><div class="num g" data-to="0" data-text="0">0</div><div class="lab">Android needed for CI</div></div>
+    </div>
+  </section>
+
+  <!-- S7 CLOSE -->
+  <section class="scene" id="s7">
+    <div class="logo">
+      <div class="mark"></div>
+      <h1 class="gradient-text">Mobile QA Test Runner</h1>
+    </div>
+    <div class="principles">
+      <span><b>Deterministic</b></span><span class="dotsep">·</span>
+      <span><b>Self-healing</b></span><span class="dotsep">·</span>
+      <span><b>Evidence-first</b></span>
+    </div>
+    <div class="repo">sicariusa/<b>mobile-testing</b></div>
+    <div class="rule"></div>
+  </section>
+
+</div>
+
+<script>
+// Kick the timeline on next frame so fonts/layout settle first.
+function counterTween(el){
+  const to = parseFloat(el.dataset.to||"0");
+  const suffix = el.dataset.suffix||"";
+  const text = el.dataset.text;
+  if(text!==undefined && to===0){ el.textContent = text; return; }
+  const dur = 1400, start = performance.now();
+  function step(now){
+    const p = Math.min(1,(now-start)/dur);
+    const e = 1-Math.pow(1-p,3);
+    el.textContent = Math.round(to*e).toLocaleString() + suffix;
+    if(p<1) requestAnimationFrame(step);
+  }
+  requestAnimationFrame(step);
+}
+window.addEventListener('load', ()=>{
+  requestAnimationFrame(()=>{
+    document.body.classList.add('play');
+    // stat counters fire at S6 start (~33.2s)
+    document.querySelectorAll('#s6 .num').forEach((el,i)=>{
+      setTimeout(()=>counterTween(el), 33200 + i*200);
+    });
+    // signal for the recorder
+    setTimeout(()=>{ window.__DONE__ = true; }, 46000);
+  });
+});
+</script>
+</body>
+</html>
