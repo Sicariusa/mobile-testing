@@ -1,37 +1,54 @@
-# Showcase video
+# Showcase videos
 
-A cinematic ~52s reel of the Mobile QA Test Runner.
+Two cuts of the Mobile QA Test Runner reel.
 
-![poster](mobile-qa-showcase-poster.png)
+| | format | length | file |
+|---|---|---|---|
+| **Vertical** (TikTok / Reels / Shorts) | 1080×1920 · 9:16 | ~43s | `mobile-qa-showcase-vertical.mp4` |
+| **Wide** (landscape) | 1920×1080 · 16:9 | ~52s | `mobile-qa-showcase.mp4` |
 
-- **`mobile-qa-showcase.mp4`** — 1080p H.264 (yuv420p, faststart) for sharing.
-- **`mobile-qa-showcase-poster.png`** — title/hero frame.
+![poster](mobile-qa-showcase-vertical-poster.png)
 
-## Scenes
+Both are H.264 (yuv420p, faststart) and play everywhere. Posters:
+`mobile-qa-showcase-vertical-poster.png`, `mobile-qa-showcase-poster.png`.
 
-1. Title — *"It reads the screen like a human. It decides like a machine."*
-2. The problem — selectors break, screens shift; so we test by **intent**.
-3. Two-way perception — the accessibility **hierarchy** + **screenshot & OCR**.
-4. A live run — a `PASS` with first-class step evidence (`resolved_by` /
-   `validated_by` / recovery / learned selector).
-5. The recovery ladder — retry → keyboard → dialog → scroll → bearing → OCR.
-6. Stats — 6,897 lines of Python · 102 tests · 19 engine modules ·
-   74% fewer device reads · 51s → 29s · no Android needed for CI.
-7. Close — Deterministic · Self-healing · Evidence-first.
+## Vertical cut (product film — no internals)
 
-## Rebuild it
+An Apple-styled film with the phone as a persistent hero. Benefit-led copy only —
+it never shows how the engine works.
 
-The video is rendered from a self-contained animated page and screen-recorded,
-so it regenerates identically:
+1. Title — *"Automated testing that sees your app the way people do."*
+2. Meet the runner — *"It drives your whole app. On its own."*
+3. Perception — *"Finds every control. Reads every word."*
+4. Resilience — *"Something in the way? It finds another."* (obstruction clears)
+5. Evidence — *"Every step, captured as proof."*
+6. Confidence — *"Know it works. Every time."* (Welcome / `PASS`)
+7. Close — Deterministic · Self-healing · Effortless.
+
+## Wide cut (engineering deep-dive)
+
+The original landscape reel that does walk through the mechanism (perception,
+a live run with step evidence, the recovery ladder, repo stats). Keep it for
+internal / technical audiences; use the vertical cut for public sharing.
+
+## Rebuild either one
+
+Rendered from a self-contained animated page and screen-recorded, so each
+regenerates identically. The recorder is configurable via env vars:
 
 ```bash
-# source page: docs/showcase/showcase.html  (deterministic, time-based CSS)
-node tools/record_showcase.mjs               # → media/mobile-qa-showcase.webm
+# Vertical (9:16)
+SHOW_PAGE=docs/showcase/showcase-vertical.html VID_W=1080 VID_H=1920 SHOW_MS=42000 \
+  node tools/record_showcase.mjs           # → media/*.webm
 
-# transcode to a shareable MP4 with any full ffmpeg build
-ffmpeg -ss 0.5 -i media/mobile-qa-showcase.webm \
+# Wide (16:9) — the default
+node tools/record_showcase.mjs
+
+# transcode to a shareable MP4 with any full ffmpeg build (trim the black head)
+ffmpeg -ss 0.5 -i media/<recording>.webm \
   -c:v libx264 -profile:v high -pix_fmt yuv420p -crf 19 -preset slow \
-  -movflags +faststart -an media/mobile-qa-showcase.mp4
+  -movflags +faststart -an media/out.mp4
 ```
 
-`docs/showcase/showcase.html` opens in any browser on its own — no build step.
+Both source pages open standalone in any browser — no build step:
+`docs/showcase/showcase-vertical.html`, `docs/showcase/showcase.html`.

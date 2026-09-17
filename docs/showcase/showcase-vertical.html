@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mobile QA Test Runner — Vertical Showcase</title>
+<style>
+/* ============================================================
+   MOBILE QA TEST RUNNER — vertical (9:16) product film.
+   Apple-styled: near-black, restrained, one accent, slow easing,
+   the phone as a persistent floating hero. Benefit-led copy only —
+   nothing about the engine internals.
+   Deterministic, time-based CSS timeline keyed off body.play.
+   Timeline (seconds):
+     S1 Title      0.0 –  5.0
+     ACT (phone)   5.0 – 33.0   (captions swap around a held product)
+        cap1  5.4 –  9.0
+        cap2  9.3 – 15.0
+        cap3 15.3 – 21.0
+        cap4 21.3 – 27.0
+        cap5 27.3 – 32.6
+     S7 Close     33.0 – 39.2
+   ============================================================ */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500&display=swap');
+
+:root{
+  --bg:#000;
+  --ink:#f5f5f7;      /* apple off-white */
+  --muted:#86868b;    /* apple gray */
+  --accent:#3fe0c5;   /* restrained teal */
+  --accent-soft:rgba(63,224,197,.16);
+  --W:1080px; --H:1920px;
+  --ease:cubic-bezier(.16,1,.3,1);
+}
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{width:100%;height:100%;background:#000;overflow:hidden}
+body{ font-family:'Inter',-apple-system,system-ui,sans-serif; color:var(--ink); -webkit-font-smoothing:antialiased; }
+
+#stage{
+  position:fixed; inset:0; width:var(--W); height:var(--H); overflow:hidden;
+  background:
+    radial-gradient(120% 60% at 50% -8%, #0c1016 0%, #050608 46%, #000 78%);
+}
+/* one very soft moving light — the only ambient motion */
+#stage::before{
+  content:""; position:absolute; left:50%; top:16%; width:900px; height:900px;
+  transform:translate(-50%,-50%);
+  background:radial-gradient(circle, rgba(63,224,197,.10), transparent 62%);
+  filter:blur(8px); opacity:.9;
+}
+
+.scene{ position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; opacity:0; }
+
+/* generic apple-ish reveal */
+.rise{ opacity:0; transform:translateY(30px); }
+body.play .rise{ animation:rise 1.1s var(--ease) both; }
+@keyframes rise{ to{opacity:1; transform:none} }
+.riseOut{ } /* handled per-caption */
+
+/* ---------------- S1 TITLE ---------------- */
+body.play #s1{ animation:fade 5.0s linear 0s both; }
+@keyframes fade{ 0%{opacity:0}8%{opacity:1}86%{opacity:1}100%{opacity:0} }
+#s1 .mark{ width:96px;height:96px;border-radius:26px;position:relative;
+  background:linear-gradient(155deg,#5ff0d6,#2ea6ff);
+  box-shadow:0 0 60px rgba(63,224,197,.35); margin-bottom:44px; animation-delay:.35s }
+#s1 .mark::after{content:"";position:absolute;inset:18px;border-radius:13px;border:3.5px solid rgba(0,0,0,.82)}
+#s1 .mark::before{content:"";position:absolute;left:43px;top:27px;width:11px;height:11px;border-radius:50%;background:#04060b;z-index:2;box-shadow:0 28px 0 #04060b}
+#s1 h1{ font-weight:700; font-size:96px; letter-spacing:-.03em; line-height:1.02; text-align:center; }
+#s1 h1 .a{ display:block; animation-delay:.55s }
+#s1 h1 .b{ display:block; color:var(--muted); animation-delay:.75s }
+#s1 .tag{ margin-top:40px; font-size:33px; font-weight:400; color:var(--muted); max-width:760px; text-align:center; line-height:1.4; animation-delay:1.25s }
+
+/* ---------------- ACT (persistent phone) ---------------- */
+body.play #act{ animation:actFade 28.0s linear 5.0s both; }
+@keyframes actFade{ 0%{opacity:0}3%{opacity:1}97.5%{opacity:1}100%{opacity:0} }
+#act{ justify-content:flex-start; }
+
+/* caption zone (top) */
+.caps{ position:absolute; top:150px; left:0; right:0; height:300px; display:flex; align-items:flex-start; justify-content:center; text-align:center; }
+.cap{ position:absolute; width:900px; }
+.cap .eyebrow{ font-size:24px; letter-spacing:.02em; color:var(--accent); font-weight:600; margin-bottom:18px; }
+.cap h2{ font-size:66px; font-weight:700; letter-spacing:-.025em; line-height:1.08; }
+.cap h2 .dim{ color:var(--muted); }
+/* each caption: fade+rise in, fade out */
+.cap{ opacity:0; }
+body.play .cap{ animation-name:capCycle; animation-timing-function:var(--ease); animation-fill-mode:both; }
+@keyframes capCycle{ 0%{opacity:0;transform:translateY(26px)} 12%{opacity:1;transform:none} 86%{opacity:1;transform:none} 100%{opacity:0;transform:translateY(-16px)} }
+body.play #cap1{ animation-duration:3.6s;  animation-delay:5.4s; }
+body.play #cap2{ animation-duration:5.7s;  animation-delay:9.3s; }
+body.play #cap3{ animation-duration:5.7s;  animation-delay:15.3s; }
+body.play #cap4{ animation-duration:5.7s;  animation-delay:21.3s; }
+body.play #cap5{ animation-duration:5.3s;  animation-delay:27.3s; }
+#cap5 h2{ color:var(--ink) }
+
+/* the phone — floats in, holds, gentle bob */
+.phonewrap{ position:absolute; top:560px; left:50%; transform:translateX(-50%);
+  opacity:0; }
+body.play .phonewrap{ animation:phoneIn 1.5s var(--ease) 5.4s both, bob 7s ease-in-out 7s infinite; }
+@keyframes phoneIn{ from{opacity:0; transform:translateX(-50%) translateY(70px) scale(.94)} to{opacity:1; transform:translateX(-50%) translateY(0) scale(1)} }
+@keyframes bob{ 0%,100%{margin-top:0} 50%{margin-top:-16px} }
+
+.phone{ position:relative; width:468px; height:980px; border-radius:60px;
+  background:linear-gradient(160deg,#15151a,#0a0a0d);
+  border:2px solid rgba(255,255,255,.10);
+  box-shadow:0 60px 140px rgba(0,0,0,.7), 0 0 0 7px #050506, inset 0 0 0 2px rgba(255,255,255,.04);
+  padding:18px;
+}
+.phone .notch{ position:absolute; top:20px; left:50%; transform:translateX(-50%); width:150px;height:32px;background:#050506;border-radius:0 0 20px 20px;z-index:6 }
+.screen{ position:relative; width:100%; height:100%; border-radius:44px; overflow:hidden; background:linear-gradient(180deg,#141d33,#0b1020); }
+.appbar{ height:86px; background:linear-gradient(90deg,#1d2c54,#16234a); display:flex;align-items:center;justify-content:center;color:#dbe4ff;font-weight:600;font-size:23px;letter-spacing:.01em;border-bottom:1px solid rgba(255,255,255,.06) }
+.brandrow{ display:flex; align-items:center; gap:12px }
+.brandrow .g{ width:26px;height:26px;border-radius:8px;background:linear-gradient(150deg,#5ff0d6,#2ea6ff) }
+.field{ position:relative; margin:34px 28px 0; height:72px;border-radius:16px;background:rgba(255,255,255,.06);border:1.5px solid rgba(255,255,255,.12);display:flex;align-items:center;padding:0 22px;color:#93a4cc;font-size:22px }
+.field .val{color:#eaf0ff}
+.cta{ position:relative; margin:36px 28px 0; height:76px;border-radius:16px;background:linear-gradient(90deg,#3fe0c5,#22c3e6);display:flex;align-items:center;justify-content:center;color:#04231d;font-weight:800;font-size:24px;letter-spacing:.06em }
+
+/* reticle that glides field → button (the "finds every control" beat, abstract) */
+.reticle{ position:absolute; left:28px; width:412px; height:72px; border-radius:16px;
+  border:2.5px solid var(--accent); box-shadow:0 0 0 6px var(--accent-soft), 0 0 32px rgba(63,224,197,.5);
+  opacity:0; top:120px; z-index:4 }
+body.play .reticle{ animation:reticle 5.0s var(--ease) 9.7s both; }
+@keyframes reticle{
+  0%{opacity:0; top:120px} 10%{opacity:1; top:120px}      /* username */
+  34%{opacity:1; top:120px}
+  48%{opacity:1; top:218px}                                /* password */
+  70%{opacity:1; top:218px}
+  84%{opacity:1; top:338px; height:76px}                   /* login btn */
+  96%{opacity:1; top:338px; height:76px}
+  100%{opacity:0; top:338px; height:76px}
+}
+/* small check badges pop as the reticle confirms */
+.chk{ position:absolute; right:44px; width:40px;height:40px;border-radius:50%;
+  background:var(--accent); color:#04231d; display:flex;align-items:center;justify-content:center;
+  font-size:24px; font-weight:800; opacity:0; transform:scale(.4); z-index:5 }
+.chk.f1{ top:136px } .chk.f2{ top:234px } .chk.b1{ top:356px }
+body.play .chk.f1{ animation:pop .6s var(--ease) 11.4s both, fadeLater .5s linear 20.6s forwards }
+body.play .chk.f2{ animation:pop .6s var(--ease) 12.9s both, fadeLater .5s linear 20.6s forwards }
+body.play .chk.b1{ animation:pop .6s var(--ease) 14.2s both, fadeLater .5s linear 20.6s forwards }
+@keyframes pop{ from{opacity:0;transform:scale(.4)} to{opacity:1;transform:scale(1)} }
+@keyframes fadeLater{ to{opacity:0} }
+
+/* keyboard obstruction (cap3: "something in the way? it finds another") */
+.keyboard{ position:absolute; left:0; right:0; bottom:0; height:360px; z-index:7;
+  background:linear-gradient(180deg,#20242e,#171a22); border-top:1px solid rgba(255,255,255,.08);
+  border-radius:26px 26px 0 0; transform:translateY(100%); opacity:0;
+  display:grid; grid-template-columns:repeat(10,1fr); grid-auto-rows:52px; gap:9px; padding:22px 16px }
+.keyboard i{ background:rgba(255,255,255,.08); border-radius:8px; }
+/* kbDown must be forwards-only: a `both` here back-fills its shown "from"
+   state to t=0 and the keyboard appears far too early. */
+body.play .keyboard{ animation:kbUp .7s var(--ease) 15.8s both, kbDown .8s var(--ease) 18.6s forwards; }
+@keyframes kbUp{ from{transform:translateY(100%);opacity:0} to{transform:translateY(0);opacity:1} }
+@keyframes kbDown{ from{transform:translateY(0);opacity:1} to{transform:translateY(100%);opacity:0} }
+/* a soft "cleared" pulse on the button after keyboard leaves */
+.clearpulse{ position:absolute; left:28px; top:338px; width:412px; height:76px; border-radius:16px;
+  box-shadow:0 0 0 0 rgba(63,224,197,.6); opacity:0; z-index:4 }
+body.play .clearpulse{ animation:clearPulse 1.3s ease-out 19.4s both; }
+@keyframes clearPulse{ 0%{opacity:1;box-shadow:0 0 0 0 rgba(63,224,197,.55)} 100%{opacity:0;box-shadow:0 0 0 40px rgba(63,224,197,0)} }
+
+/* proof beat (cap4): shutter flash + two evidence thumbnails float out */
+.shutter{ position:absolute; inset:0; background:#fff; opacity:0; z-index:8 }
+body.play .shutter{ animation:shutter .5s ease-out 21.8s both; }
+@keyframes shutter{ 0%{opacity:0}18%{opacity:.85}100%{opacity:0} }
+.thumbs{ position:absolute; z-index:9; }
+.thumb{ position:absolute; width:150px; height:270px; border-radius:20px; border:2px solid rgba(255,255,255,.16);
+  background:linear-gradient(180deg,#182034,#0d1424); box-shadow:0 24px 60px rgba(0,0,0,.55); opacity:0;
+  display:flex;flex-direction:column;overflow:hidden }
+.thumb .bar{ height:34px; background:linear-gradient(90deg,#1d2c54,#16234a) }
+.thumb .ln{ height:12px; margin:16px 14px 0; border-radius:6px; background:rgba(255,255,255,.10) }
+.thumb .tag{ margin-top:auto; padding:10px 0; text-align:center; font-size:15px; font-weight:600; letter-spacing:.08em }
+.thumb.before{ left:-96px; top:220px } .thumb.before .tag{ color:var(--muted) }
+.thumb.after{ right:-96px; top:360px } .thumb.after .tag{ color:var(--accent) }
+body.play .thumb.before{ animation:thumbL 1.2s var(--ease) 22.4s both, fadeLater .6s linear 26.4s forwards }
+body.play .thumb.after{ animation:thumbR 1.2s var(--ease) 22.9s both, fadeLater .6s linear 26.4s forwards }
+@keyframes thumbL{ from{opacity:0; transform:translate(60px,0) rotate(0)} to{opacity:1; transform:translate(0,0) rotate(-7deg)} }
+@keyframes thumbR{ from{opacity:0; transform:translate(-60px,0) rotate(0)} to{opacity:1; transform:translate(0,0) rotate(7deg)} }
+
+/* verdict (cap5): welcome state + PASS */
+.welcome{ position:absolute; inset:0; background:linear-gradient(180deg,#0e2b25,#0b1020); display:flex;flex-direction:column;align-items:center;justify-content:center;gap:20px; opacity:0; z-index:6 }
+.welcome .wc{ width:120px;height:120px;border-radius:50%;border:4px solid var(--accent); display:flex;align-items:center;justify-content:center;color:var(--accent);font-size:64px;font-weight:800 }
+.welcome .wt{ font-size:40px; font-weight:700; color:var(--ink) }
+.welcome .ws{ font-size:22px; color:#9fb2d6 }
+body.play .welcome{ animation:rise .9s var(--ease) 27.6s both; }
+.passbadge{ position:absolute; left:50%; bottom:150px; transform:translateX(-50%) scale(.5); z-index:7;
+  background:var(--accent); color:#04231d; font-weight:800; font-size:30px; letter-spacing:.18em;
+  padding:16px 42px; border-radius:100px; box-shadow:0 0 50px rgba(63,224,197,.5); opacity:0 }
+body.play .passbadge{ animation:pop .7s var(--ease) 28.7s both; }
+
+/* ---------------- S7 CLOSE ---------------- */
+body.play #s7{ animation:fade 6.2s linear 33.0s both; }
+#s7 .mark{ width:104px;height:104px;border-radius:28px;position:relative;
+  background:linear-gradient(155deg,#5ff0d6,#2ea6ff); box-shadow:0 0 66px rgba(63,224,197,.4); margin-bottom:46px; animation-delay:33.35s }
+#s7 .mark::after{content:"";position:absolute;inset:19px;border-radius:14px;border:4px solid rgba(0,0,0,.82)}
+#s7 .mark::before{content:"";position:absolute;left:47px;top:29px;width:12px;height:12px;border-radius:50%;background:#04060b;z-index:2;box-shadow:0 30px 0 #04060b}
+#s7 h1{ font-weight:700; font-size:82px; letter-spacing:-.03em; text-align:center; line-height:1.05; animation-delay:33.5s }
+#s7 .principles{ margin-top:40px; font-size:30px; color:var(--muted); font-weight:500; letter-spacing:.01em; animation-delay:34.0s }
+#s7 .principles b{ color:var(--ink); font-weight:600 }
+#s7 .repo{ margin-top:64px; font-family:'JetBrains Mono',monospace; font-size:26px; color:var(--muted); animation-delay:34.5s }
+#s7 .repo b{ color:var(--ink) }
+</style>
+</head>
+<body>
+<div id="stage">
+
+  <!-- S1 TITLE -->
+  <section class="scene" id="s1">
+    <div class="mark rise"></div>
+    <h1>
+      <span class="a rise">Mobile QA</span>
+      <span class="b rise">Test Runner</span>
+    </h1>
+    <p class="tag rise">Automated testing that sees your app<br>the way people do.</p>
+  </section>
+
+  <!-- ACT -->
+  <section class="scene" id="act">
+    <div class="caps">
+      <div class="cap" id="cap1"><div class="eyebrow">Meet the runner</div><h2>It drives your whole app.<br><span class="dim">On its own.</span></h2></div>
+      <div class="cap" id="cap2"><div class="eyebrow">Perception</div><h2>Finds every control.<br>Reads every word.</h2></div>
+      <div class="cap" id="cap3"><div class="eyebrow">Resilience</div><h2>Something in the way?<br><span class="dim">It finds another.</span></h2></div>
+      <div class="cap" id="cap4"><div class="eyebrow">Evidence</div><h2>Every step,<br>captured as proof.</h2></div>
+      <div class="cap" id="cap5"><div class="eyebrow">Confidence</div><h2>Know it works.<br><span class="dim">Every time.</span></h2></div>
+    </div>
+
+    <div class="phonewrap">
+      <div class="phone">
+        <div class="notch"></div>
+        <div class="screen">
+          <div class="appbar"><span class="brandrow"><span class="g"></span>Swag&nbsp;Labs</span></div>
+          <div class="field">Username&nbsp;·&nbsp;<span class="val">test@shop.io</span></div>
+          <div class="field">••••••••••</div>
+          <div class="cta">LOGIN</div>
+
+          <div class="reticle"></div>
+          <div class="chk f1">✓</div>
+          <div class="chk f2">✓</div>
+          <div class="chk b1">✓</div>
+          <div class="clearpulse"></div>
+
+          <div class="keyboard">
+            <i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i>
+            <i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i>
+            <i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i>
+          </div>
+
+          <div class="welcome">
+            <div class="wc">✓</div>
+            <div class="wt">Welcome back</div>
+            <div class="ws">You're signed in</div>
+          </div>
+          <div class="shutter"></div>
+        </div>
+      </div>
+      <div class="thumbs">
+        <div class="thumb before"><div class="bar"></div><div class="ln" style="width:70%"></div><div class="ln" style="width:50%"></div><div class="tag">BEFORE</div></div>
+        <div class="thumb after"><div class="bar"></div><div class="ln" style="width:60%"></div><div class="ln" style="width:80%"></div><div class="tag">AFTER · PASS</div></div>
+      </div>
+      <div class="passbadge">PASS</div>
+    </div>
+  </section>
+
+  <!-- S7 CLOSE -->
+  <section class="scene" id="s7">
+    <div class="mark rise"></div>
+    <h1 class="rise">Mobile QA<br>Test Runner</h1>
+    <div class="principles rise"><b>Deterministic</b> &nbsp;·&nbsp; <b>Self-healing</b> &nbsp;·&nbsp; <b>Effortless</b></div>
+    <div class="repo rise">sicariusa/<b>mobile-testing</b></div>
+  </section>
+
+</div>
+<script>
+window.addEventListener('load', ()=>{
+  requestAnimationFrame(()=>{
+    document.body.classList.add('play');
+    setTimeout(()=>{ window.__DONE__ = true; }, 40000);
+  });
+});
+</script>
+</body>
+</html>
